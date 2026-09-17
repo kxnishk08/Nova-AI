@@ -1,0 +1,80 @@
+We have identified and fixed the EF Core model error caused by duplicate entity/configuration implementations.
+
+I do NOT want the temporary csproj exclusion workaround to remain.
+
+Perform a permanent cleanup of the duplicate implementation.
+
+Requirements:
+
+1. The authoritative architecture is:
+
+   src/NovaBanking.Application/Domain/Entities/*.cs
+
+   src/NovaBanking.Infrastructure/Data/NovaBankingDbContext.cs
+
+   src/NovaBanking.Infrastructure/Data/Configurations/*.cs
+
+2. Inspect the entire solution for duplicate implementations of:
+   - Customer
+   - CustomerCredential
+   - CustomerSession
+   - Account
+   - Transaction
+   - Loan
+   - CreditCard
+   - IEntityTypeConfiguration implementations
+   - NovaBankingDbContext
+
+3. The duplicate implementation under:
+   src/NovaBanking.Application/Entities/
+   and/or
+   src/NovaBanking.Infrastructure/Persistence/
+   should be permanently removed if it is not referenced by the authoritative architecture.
+
+4. Before deleting anything, search the entire solution for references/usings to those duplicate namespaces and update any legitimate references to the authoritative namespaces.
+
+5. Do NOT delete the authoritative:
+   - Domain/Entities files
+   - Data/NovaBankingDbContext.cs
+   - Data/Configurations files
+
+6. Remove the temporary <Compile Remove="..."/> workaround from:
+   src/NovaBanking.Infrastructure/NovaBanking.Infrastructure.csproj
+
+7. After cleanup, there must be:
+   - exactly one Account entity
+   - exactly one NovaBankingDbContext
+   - exactly one EF configuration per entity
+   - exactly one intended mapping for each database table
+
+8. Do not solve the problem by introducing EF table splitting or changing the domain model.
+
+9. Do not rename tables/entities merely to avoid conflicts.
+
+10. Do not change:
+    - Azure SQL configuration
+    - connection string
+    - /health behavior
+    - authentication
+    - MCP
+    - RAG
+    - Semantic Kernel
+    - Azure OpenAI
+
+11. Do NOT create or apply migrations yet.
+
+12. Do NOT use EnsureCreated, EnsureDeleted, DropDatabase, or automatic migrations.
+
+13. Run:
+    dotnet build
+    dotnet test
+
+14. Finally report:
+    - which duplicate files were deleted
+    - which references/usings were changed
+    - confirmation that the temporary csproj exclusion was removed
+    - confirmation that only one authoritative entity/configuration set remains
+    - build result
+    - test result
+
+Do not make any other architectural changes.
