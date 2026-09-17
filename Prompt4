@@ -1,0 +1,33 @@
+We have now configured the Azure SQL connection string locally using ASP.NET Core User Secrets under:
+
+ConnectionStrings:NovaBanking
+
+Do NOT expose, print, log, commit, or hardcode the connection string or any credentials.
+
+Now inspect the existing solution and implement the local database connectivity wiring only.
+
+Requirements:
+1. Register NovaBankingDbContext in NovaBanking.Api using the SQL Server provider.
+2. Read the connection string from:
+   ConnectionStrings:NovaBanking
+3. Keep the existing project architecture intact:
+   Api -> Application + Infrastructure
+   Infrastructure -> Application
+4. Do not move entities or DbContext between projects.
+5. Do not hardcode any credentials.
+6. Do not add Azure OpenAI, Semantic Kernel, MCP, RAG, authentication, authorization, or AI functionality yet.
+7. Add a safe database connectivity check that can be used during development.
+8. Keep /health working.
+9. Do not use EnsureCreated() as the production database initialization mechanism. The existing seed/migration code can remain untouched for now if necessary.
+10. Do not modify Azure resources from code.
+11. Do not run destructive database commands such as DropDatabase.
+12. Build the entire solution and fix compilation errors.
+
+At the end, report:
+- exactly which files were changed
+- how DbContext is registered
+- how configuration is loaded
+- whether the solution builds successfully
+- any remaining database initialization issues
+
+Do not reveal the actual secret value anywhere in your response.
