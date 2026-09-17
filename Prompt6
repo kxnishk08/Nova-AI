@@ -1,0 +1,61 @@
+The /health endpoint is returning HTTP 503, and we now have the actual exception.
+
+The exception is:
+
+System.InvalidOperationException:
+Cannot use table 'Accounts' for entity type 'Account' since it is being used for entity type 'Account' and potentially other entity types, but there is no linking relationship. Add a foreign key to 'Account' on the primary key properties and pointing to the primary key on another entity type mapped to 'Accounts'.
+
+This is an EF Core model configuration problem, NOT an Azure SQL connectivity problem.
+
+Diagnose and fix the EF Core model configuration.
+
+Requirements:
+
+1. Inspect the ENTIRE solution for every occurrence of:
+   - Account entity configuration
+   - ToTable("Accounts")
+   - DbSet<Account>
+   - Account entity declarations
+   - Any inheritance involving Account
+   - Any duplicate Account entity types/classes
+   - Any configuration that could map multiple entity types to the "Accounts" table.
+
+2. Determine exactly why EF Core believes that multiple entity types are mapped to the "Accounts" table.
+
+3. Fix the underlying model/configuration issue correctly.
+
+4. There must be exactly one intended Account entity mapped to the Accounts table unless the domain model explicitly requires table splitting. Do NOT introduce table splitting merely to silence the error.
+
+5. Preserve the case-study database model:
+   Customers
+   CustomerCredentials
+   CustomerSessions
+   Accounts
+   Transactions
+   Loans
+   CreditCards
+
+6. Preserve the existing entity relationships and ownership constraints.
+
+7. Do not rename tables or entities just to hide the problem.
+
+8. Do not remove Account relationships or properties just to make EF Core build.
+
+9. Do not change the API /health behavior except as necessary for the EF model to work.
+
+10. Do not modify Azure resources or connection strings.
+
+11. Do not add authentication, MCP, RAG, Semantic Kernel, Azure OpenAI, or any other future-phase functionality.
+
+12. Do not create or apply migrations yet.
+
+13. Do not use EnsureCreated, EnsureDeleted, DropDatabase, or automatic migrations.
+
+14. After fixing the issue:
+   - run dotnet build
+   - run dotnet test
+   - report exactly what caused the duplicate/shared Accounts table mapping
+   - list every file changed
+   - explain the fix briefly.
+
+Do not guess. Inspect the actual codebase and identify the exact conflicting mapping before changing it.
