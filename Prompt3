@@ -1,0 +1,391 @@
+Proceed to Phase 2: Database and EF Core.
+
+Use:
+
+#file:Nova_Case_Study_COMPLETE.md
+
+as the authoritative specification.
+
+Implement ONLY the database/domain layer for this phase.
+
+DO NOT implement authentication, Semantic Kernel, Azure OpenAI, Azure AI Search, RAG, MCP tools, AI orchestration, UI, or deployment yet.
+
+==================================================
+1. DOMAIN ENTITIES
+==================================================
+
+Create the following entities in:
+
+src/NovaBanking.Application/
+
+- Customer
+- CustomerCredential
+- CustomerSession
+- Account
+- Transaction
+- Loan
+- CreditCard
+
+Follow the exact fields and data types specified in the case study.
+
+Required schema:
+
+Customer:
+- CustomerId int PK
+- CustomerNumber nvarchar(20)
+- FullName nvarchar(120)
+- Email nvarchar(150)
+- Phone nvarchar(20)
+- Status nvarchar(20)
+- CreatedOn datetime2 UTC
+
+CustomerCredential:
+- CredentialId int PK
+- CustomerId FK
+- PinHash nvarchar(500)
+- FailedAttemptCount int
+- LockedUntil datetime2 nullable
+- LastSuccessfulLogin datetime2 nullable
+
+CustomerSession:
+- SessionId uniqueidentifier PK
+- CustomerId FK
+- TokenHash nvarchar(500)
+- ExpiresOn datetime2
+- RevokedOn datetime2 nullable
+- CreatedOn datetime2
+
+Account:
+- AccountId int PK
+- CustomerId FK
+- AccountNumber nvarchar(30)
+- AccountType nvarchar(30)
+- LedgerBalance decimal(18,2)
+- AvailableBalance decimal(18,2)
+- Currency char(3)
+- Status nvarchar(20)
+
+Transaction:
+- TransactionId bigint PK
+- AccountId FK
+- TransactionType nvarchar(20)
+- Amount decimal(18,2)
+- Description nvarchar(200)
+- TransactionDate datetime2
+- ReferenceNumber nvarchar(40)
+
+Loan:
+- LoanId int PK
+- CustomerId FK
+- LoanNumber nvarchar(30)
+- LoanType nvarchar(40)
+- SanctionedAmount decimal(18,2)
+- OutstandingAmount decimal(18,2)
+- InterestRate decimal(5,2)
+- NextDueDate date
+- Status nvarchar(25)
+
+CreditCard:
+- CreditCardId int PK
+- CustomerId FK
+- MaskedCardNumber nvarchar(20)
+- CardType nvarchar(30)
+- CreditLimit decimal(18,2)
+- AvailableLimit decimal(18,2)
+- OutstandingBalance decimal(18,2)
+- MinimumAmountDue decimal(18,2)
+- PaymentDueDate date
+- Status nvarchar(20)
+
+==================================================
+2. RELATIONSHIPS
+==================================================
+
+Implement these relationships:
+
+Customer
+    1 -> 0..1 CustomerCredential
+    1 -> many CustomerSessions
+    1 -> many Accounts
+    1 -> many Loans
+    1 -> many CreditCards
+
+Account
+    1 -> many Transactions
+
+Every foreign key must be explicitly configured.
+
+Use appropriate navigation properties.
+
+Configure sensible delete behavior.
+
+Do not use cascade delete in a way that could accidentally destroy large portions of customer financial data.
+
+==================================================
+3. EF CORE
+==================================================
+
+Add the appropriate EF Core packages to:
+
+NovaBanking.Infrastructure
+
+At minimum:
+
+- Microsoft.EntityFrameworkCore
+- Microsoft.EntityFrameworkCore.SqlServer
+- Microsoft.EntityFrameworkCore.Design
+
+Use SQL Server.
+
+Create:
+
+NovaBankingDbContext
+
+in:
+
+src/NovaBanking.Infrastructure/
+
+Configure all entities using either IEntityTypeConfiguration<T> classes or an equally maintainable approach.
+
+Explicitly configure:
+
+- table names
+- primary keys
+- foreign keys
+- string lengths
+- decimal precision
+- required/optional fields
+- indexes where appropriate
+- unique constraints where appropriate
+
+Do not rely unnecessarily on EF Core conventions for important security/data constraints.
+
+==================================================
+4. IMPORTANT DATA DESIGN RULES
+==================================================
+
+CustomerNumber should be unique.
+
+AccountNumber should be unique.
+
+LoanNumber should be unique.
+
+SessionId should be unique.
+
+CreditCardId should be unique.
+
+Do not store complete credit-card numbers.
+
+The CreditCard entity must contain only the masked card number specified by the case study.
+
+Do not add plaintext PIN fields.
+
+Do not add raw PIN fields anywhere in the domain model.
+
+Do not add unnecessary sensitive fields.
+
+==================================================
+5. PIN HASHING
+==================================================
+
+Do NOT implement the authentication service yet.
+
+However, the database seed data must contain valid PIN hashes rather than plaintext PINs.
+
+Use ASP.NET Core's PasswordHasher<T> for hashing demo PINs.
+
+The raw demo PIN may exist only transiently during seed-data generation.
+
+It must never be:
+
+- stored in the database
+- written to a source file
+- written to logs
+- included in application responses
+- included in audit records
+
+If PasswordHasher requires an appropriate package/reference, add it only where required.
+
+==================================================
+6. SYNTHETIC SEED DATA
+==================================================
+
+Create deterministic synthetic demonstration data for multiple customers.
+
+Create at least:
+
+- 3 customers
+- 1 credential per customer
+- multiple accounts across customers
+- multiple transactions
+- multiple loans
+- multiple credit cards
+
+Ensure customers have different financial records.
+
+Include enough variation to test:
+
+- active accounts
+- dormant/closed account behavior where appropriate
+- active loans
+- applied loans
+- closed loans
+- overdue loan where appropriate
+- active cards
+- inactive/blocked card states where appropriate
+- customer with no card
+- customer with no loan
+
+All data must be clearly synthetic.
+
+Do not use real people's information.
+
+Create known demo PINs for development/testing, but NEVER store the raw values in the database or source code.
+
+If the seed mechanism requires a deterministic source PIN, isolate it so that it cannot accidentally become part of persisted data or logging.
+
+==================================================
+7. SEEDING DESIGN
+==================================================
+
+Implement seeding in a maintainable way.
+
+The seed operation must be:
+
+- deterministic
+- idempotent
+- safe to run more than once
+- appropriate for development/demo environments
+
+Do not duplicate records every time the application starts.
+
+Do not automatically run destructive database operations.
+
+Do not call EnsureDeleted().
+
+Do not drop existing databases.
+
+Do not automatically apply migrations against my Azure SQL database.
+
+Create the migration artifacts but leave actual Azure database migration execution for a later step.
+
+==================================================
+8. CONFIGURATION
+==================================================
+
+Add database configuration using:
+
+ConnectionStrings:NovaBanking
+
+Do NOT hardcode:
+
+- SQL server name
+- database name
+- username
+- password
+- complete connection string
+
+Use ASP.NET Core configuration.
+
+For local development, support user secrets/environment variables.
+
+Do not create or expose secrets.
+
+==================================================
+9. MIGRATIONS
+==================================================
+
+Create the initial EF Core migration.
+
+Use an appropriate migration name such as:
+
+InitialCreate
+
+Place migrations in NovaBanking.Infrastructure.
+
+Make sure the migration represents the complete schema.
+
+Do NOT execute the migration against Azure SQL yet.
+
+==================================================
+10. TESTING
+==================================================
+
+Add database-focused tests.
+
+At minimum verify:
+
+- DbContext can be constructed
+- entity relationships are valid
+- required constraints are configured
+- seed data is deterministic
+- multiple customers have isolated records
+- no plaintext PIN is persisted
+- expected navigation relationships exist
+
+Use an appropriate testing strategy for this phase.
+
+Do not add unnecessary infrastructure just to satisfy tests.
+
+==================================================
+11. CURRENT TEMPLATE CLEANUP
+==================================================
+
+The ASP.NET Core templates currently contain example WeatherForecast/sample endpoint code.
+
+Remove the template-only WeatherForecast/sample endpoint and related unused code where appropriate.
+
+Do not add any Nova business API endpoints yet.
+
+The API should remain a minimal compilable shell.
+
+==================================================
+12. BUILD VALIDATION
+==================================================
+
+After implementation:
+
+1. Restore packages.
+2. Build the entire solution.
+3. Run all tests.
+4. Fix compilation errors.
+5. Fix failing tests.
+6. Verify the migration was generated.
+7. Verify no secrets were added.
+8. Verify no plaintext PIN is persisted.
+
+Do not hide warnings or errors.
+
+Do not modify unrelated files.
+
+==================================================
+13. FINAL REPORT
+==================================================
+
+When finished, report:
+
+1. Entities created.
+2. Relationships created.
+3. EF Core packages added.
+4. DbContext location.
+5. Configuration approach.
+6. Migration name/location.
+7. Seed-data strategy.
+8. Number of synthetic customers/accounts/transactions/loans/cards.
+9. Tests added.
+10. Build result.
+11. Test result.
+12. Any warnings or assumptions.
+13. Exact next phase.
+
+IMPORTANT:
+
+Do NOT connect to, modify, migrate, delete, recreate, or seed my Azure SQL database during this task.
+
+Only prepare the application/database layer and migration artifacts.
+
+Do NOT implement authentication yet.
+Do NOT implement MCP yet.
+Do NOT implement RAG yet.
+Do NOT implement Semantic Kernel yet.
+Do NOT implement Azure OpenAI yet.
