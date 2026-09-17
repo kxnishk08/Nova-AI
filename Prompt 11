@@ -1,0 +1,48 @@
+The API is running on http://localhost:5146, but:
+
+POST /api/auth/pin-login
+
+returns:
+
+HTTP 404 Not Found
+
+You previously reported that AuthController implements:
+POST /api/auth/pin-login
+POST /api/auth/logout
+
+Do NOT rewrite the authentication implementation yet.
+
+Inspect the actual current codebase and determine why the route is returning 404.
+
+Check specifically:
+
+1. src/NovaBanking.Api/Controllers/AuthController.cs
+   - controller class declaration
+   - [ApiController]
+   - [Route(...)]
+   - HTTP verb attributes
+   - action method route attributes
+
+2. Program.cs
+   - AddControllers()
+   - MapControllers()
+   - any endpoint configuration
+
+3. Whether AuthController is actually compiled into NovaBanking.Api.
+
+4. Whether the controller namespace/project location is correct.
+
+5. Whether there is another route prefix causing the actual URL to differ.
+
+6. Whether the application is actually running the current compiled code.
+
+Do not change authentication behavior or database code.
+
+If a configuration issue is found, make only the minimal fix required to register the controller routes.
+
+Then:
+- dotnet build
+- report the exact route that should respond to POST
+  /api/auth/pin-login
+- report files changed
+- do not add any new authentication features.
