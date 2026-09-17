@@ -1,0 +1,216 @@
+Implement PHASE 4 of the Nova AI Banking Assistant: secure PIN authentication and server-side customer sessions.
+
+IMPORTANT:
+The Azure SQL database and InitialCreate migration are already in place. Synthetic seed data has already been applied.
+
+Before changing anything, inspect the current authoritative entities, DbContext, configurations, seed data, API structure, and existing tests.
+
+CASE-STUDY SECURITY REQUIREMENTS:
+
+- Customer-specific data requires CustomerNumber + dedicated 4-digit demo PIN.
+- PINs must be verified against the securely hashed credential stored in CustomerCredentials.
+- Authentication must be implemented by ASP.NET Core/server-side application code.
+- The LLM must NEVER be treated as an authentication or authorization authority.
+- Protected requests must derive CustomerId from the authenticated server-side session.
+- Never trust CustomerId supplied through chat, request body, query string, or AI-generated tool arguments.
+- Sessions must be short-lived.
+- Failed PIN attempts must be counted and lockout must be enforced.
+- Do not log PINs, raw session tokens, passwords, or full sensitive identifiers.
+
+IMPLEMENT:
+
+1. POST /api/auth/pin-login
+
+Request:
+
+{
+  "customerNumber": "CUST0001",
+  "pin": "1111"
+}
+
+Behavior:
+- Validate the request.
+- Look up the customer by CustomerNumber.
+- Retrieve the corresponding CustomerCredential.
+- Verify the supplied PIN using PasswordHasher<CustomerCredential>.
+- Never compare plaintext PINs directly with database values.
+- Reject invalid credentials without revealing whether the customer number or PIN was incorrect.
+- Track failed attempts.
+- Enforce the lockout policy using the existing CustomerCredential fields/model.
+- On successful authentication:
+  - reset failed-attempt state as appropriate
+  - create a CustomerSession record
+  - generate a cryptographically secure random session identifier/token
+  - store only the appropriate server-side session representation
+  - set a Secure, HttpOnly authentication cookie
+  - use an appropriate SameSite policy
+  - give the session a short expiration
+- Do not put CustomerId into the client-controlled cookie as an authorization claim that the server blindly trusts.
+- Do not return the raw session token in the JSON response.
+- Do not log the PIN or token.
+
+2. POST /api/auth/logout
+
+Behavior:
+- Identify the current authenticated session from the secure cookie.
+- Revoke/invalidate the corresponding CustomerSession.
+- Clear the authentication cookie.
+- Make logout safe to call when already logged out.
+- Do not reveal session token values in responses or logs.
+
+3. Server-side session authentication
+
+Create an appropriate service/component for resolving the current authenticated customer from the session.
+
+It must:
+- read the session identifier from the HttpOnly cookie
+- locate the corresponding CustomerSession
+- reject expired/revoked sessions
+- derive CustomerId ONLY from the server-side session record
+- make the authenticated CustomerId available to application services/controllers
+- never accept CustomerId from the AI/chat request as an authority
+
+4. Session security
+
+Use:
+- cryptographically secure random session identifiers
+- short-lived sessions
+- server-side session state
+- Secure cookie
+- HttpOnly cookie
+- appropriate SameSite configuration
+
+Do not store raw session tokens in application logs.
+
+If the existing CustomerSession model requires a hashed token/session identifier rather than plaintext storage, implement that appropriately. Do not expose the raw token.
+
+5. Failed PIN attempts / lockout
+
+Use the existing CustomerCredential fields and model.
+
+Implement a clear development-demo policy:
+- failed attempts increment
+- account becomes locked after the configured threshold
+- successful login resets the appropriate failed-attempt state
+- locked credentials cannot authenticate until the configured lockout period has passed or the existing model provides an appropriate unlock mechanism
+
+Do not invent unnecessary authentication mechanisms.
+
+6. Authorization foundation
+
+Create an application-level authenticated-customer/session abstraction that later MCP tools can use.
+
+For example, application services should be able to obtain:
+
+AuthenticatedCustomerId
+
+from the server-side session context.
+
+Do NOT make future MCP tools accept an arbitrary CustomerId supplied by the LLM.
+
+7. API behavior
+
+Add only:
+
+POST /api/auth/pin-login
+POST /api/auth/logout
+
+Do not add account/loan/card APIs yet.
+
+8. Error responses
+
+Use safe generic authentication errors.
+
+Do not reveal:
+- whether a customer number exists
+- stored PIN hashes
+- failed-attempt internals
+- session identifiers
+- database credentials
+
+9. Audit/security logging foundation
+
+Add appropriate structured audit logging for:
+- successful login
+- failed login
+- lockout
+- logout/session revocation
+
+Logs must contain no PINs, raw session tokens, passwords, or unnecessary full financial identifiers.
+
+10. Tests
+
+Add comprehensive tests for:
+
+Authentication:
+- valid CUST0001 + 1111 succeeds
+- valid CUST0002 + 2222 succeeds
+- valid CUST0003 + 3333 succeeds
+- incorrect PIN fails
+- nonexistent customer number fails safely
+- successful login creates a CustomerSession
+- successful login sets the authentication cookie
+- raw PIN is never persisted
+
+Lockout:
+- failed attempts increment
+- threshold causes lockout
+- locked customer cannot authenticate
+- successful authentication resets failed-attempt state where appropriate
+
+Sessions:
+- valid session resolves the correct CustomerId
+- expired session is rejected
+- revoked session is rejected
+- logout revokes the session
+- logout clears the cookie
+
+Authorization foundation:
+- authenticated CustomerId comes from the server-side session
+- a client cannot override CustomerId through request data
+- an arbitrary CustomerId supplied by a request is ignored/rejected rather than trusted
+
+Security:
+- PINs do not appear in logs
+- raw session tokens do not appear in logs
+- authentication error responses do not leak credential information
+
+11. Do not add:
+- Azure OpenAI
+- Azure AI Search
+- Semantic Kernel
+- MCP
+- RAG
+- AI chat
+- transfers
+- payments
+- card blocking
+- PIN changes
+- credit decisions
+- UI
+
+12. Do not modify the existing database schema unless absolutely required by the existing case-study model.
+
+If the existing CustomerCredential/CustomerSession schema is insufficient for the required behavior, STOP and explain the exact schema change needed before modifying the database.
+
+13. Do not run destructive database commands.
+Do not use EnsureCreated().
+Do not use EnsureDeleted().
+Do not DropDatabase().
+Do not automatically apply migrations on application startup.
+
+14. Build the complete solution and run all tests.
+
+At the end report:
+- files created/modified
+- authentication flow
+- session flow
+- cookie configuration
+- lockout policy
+- audit events
+- tests added
+- build result
+- test result
+- any database/schema changes required
+
+Do not implement any future-phase functionality.
