@@ -1,0 +1,61 @@
+Read the complete project specification in:
+
+#file:docs/Nova_Case_Study_COMPLETE.md
+
+Also read the repository-level Copilot instructions in:
+
+#file:.github/copilot-instructions.md
+
+I want you to act as the senior .NET architect for this project.
+
+DO NOT IMPLEMENT ANYTHING YET.
+
+First inspect the current workspace and produce an implementation assessment.
+
+Tell me:
+
+1. What files and folders currently exist.
+2. Whether a .NET solution already exists.
+3. Whether any ASP.NET Core projects already exist.
+4. Whether there is existing code that should be preserved.
+5. The exact project structure we should create.
+6. The dependency relationship between:
+   - NovaBanking.Api
+   - NovaBanking.Application
+   - NovaBanking.Infrastructure
+   - NovaBanking.McpServer
+7. The NuGet packages that will eventually be required.
+8. Which Azure services are required and what each one will be used for.
+9. Which Azure configuration values the application will eventually need.
+10. The database entities and relationships.
+11. The authentication architecture.
+12. The MCP architecture.
+13. The RAG architecture.
+14. The Semantic Kernel orchestration architecture.
+15. The testing strategy.
+16. Any ambiguity or implementation decisions that are not explicitly specified by the case study.
+
+IMPORTANT:
+
+Do not write application code yet.
+
+Do not create placeholder implementations.
+
+Do not create Azure resources.
+
+Do not invent requirements.
+
+Do not simplify away Semantic Kernel, MCP, RAG, Azure AI Search, Azure OpenAI, EF Core or SQL Server.
+
+At the end, provide:
+
+A. Current repository assessment
+B. Proposed architecture
+C. Proposed folder/project structure
+D. Dependency graph
+E. Required NuGet packages
+F. Azure configuration requirements
+G. Implementation phases
+H. Exact next implementation task
+
+The case study is the source of truth.
