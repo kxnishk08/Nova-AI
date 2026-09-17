@@ -1,0 +1,18 @@
+We have confirmed that GET /health returns HTTP 503, but the current implementation catches the database exception without logging it, so we cannot diagnose the Azure SQL connection failure.
+
+Make a TEMPORARY development-only diagnostic change.
+
+Requirements:
+1. Inspect the current /health endpoint implementation.
+2. Keep the existing database connectivity check using CanConnectAsync().
+3. When CanConnectAsync() fails or throws, log the exception to the ASP.NET Core console using ILogger.
+4. Log the exception object itself so the full exception type, message, inner exception, and stack trace are visible in the local development terminal.
+5. NEVER log the connection string, password, PIN, session token, or any other secret.
+6. Do not return the exception details in the HTTP response.
+7. Keep the HTTP response as 503.
+8. Do not change the database configuration, connection string, entities, migrations, seed data, authentication, MCP, RAG, Azure OpenAI, or any other functionality.
+9. This is only a temporary diagnostic change.
+
+Build the solution after making the change.
+
+Then tell me exactly which file you changed.
