@@ -1,0 +1,125 @@
+Proceed with the first implementation phase only: solution scaffolding.
+
+Use the existing:
+
+#file:Nova_Case_Study_COMPLETE.md
+
+as the authoritative specification.
+
+Use the architecture from your previous assessment.
+
+IMPLEMENT ONLY THE SOLUTION SKELETON.
+
+Create:
+
+NovaBanking.sln
+
+src/
+    NovaBanking.Api/
+    NovaBanking.Application/
+    NovaBanking.Infrastructure/
+    NovaBanking.McpServer/
+
+tests/
+    NovaBanking.Api.Tests/
+    NovaBanking.Application.Tests/
+    NovaBanking.Infrastructure.Tests/
+    NovaBanking.McpServer.Tests/
+
+docs/
+
+README.md
+
+PROJECT REQUIREMENTS
+
+NovaBanking.Api:
+- ASP.NET Core Web API project
+- Minimal working Program.cs
+- Swagger/OpenAPI enabled
+- No business logic yet
+
+NovaBanking.Application:
+- .NET class library
+- No dependency on Infrastructure
+- No business implementation yet
+
+NovaBanking.Infrastructure:
+- .NET class library
+- Reference Application
+- No database implementation yet
+
+NovaBanking.McpServer:
+- ASP.NET Core Web API project
+- Reference Application
+- Reference Infrastructure only where required for dependency injection
+- No MCP business tools yet
+
+TEST PROJECTS:
+- xUnit
+- Reference the appropriate production project
+- Add only minimal test scaffolding
+
+DEPENDENCY GRAPH:
+
+Api
+ -> Application
+ -> Infrastructure
+
+Infrastructure
+ -> Application
+
+McpServer
+ -> Application
+ -> Infrastructure
+
+Test projects
+ -> corresponding production projects
+
+IMPORTANT ARCHITECTURAL RULES:
+
+- Do not create a separate Domain project.
+- Keep domain models/entities in Application unless a later requirement makes another structure necessary.
+- Do not implement authentication yet.
+- Do not implement EF Core yet.
+- Do not implement SQL yet.
+- Do not implement Semantic Kernel yet.
+- Do not implement Azure OpenAI yet.
+- Do not implement Azure AI Search yet.
+- Do not implement MCP tools yet.
+- Do not implement RAG yet.
+- Do not create Azure resources.
+- Do not add secrets.
+- Do not add fake implementations that could accidentally survive into production.
+- Do not add unnecessary NuGet packages.
+- Do not hardcode configuration values.
+
+Use a modern supported .NET version compatible with the current SDK installed on this machine.
+
+Before choosing the framework version, inspect the installed .NET SDKs.
+
+Then:
+
+1. Create the solution.
+2. Create the projects.
+3. Add the correct project references.
+4. Create the test projects.
+5. Create the docs directory.
+6. Create README.md with a short description of the project.
+7. Make sure the entire solution builds successfully.
+
+Run the appropriate build command.
+
+If the build fails, fix the errors before finishing.
+
+After completing this task, report:
+
+1. .NET version selected.
+2. Projects created.
+3. Project references created.
+4. NuGet packages added.
+5. Build result.
+6. Files created/modified.
+7. Any warnings.
+8. The exact next implementation phase.
+
+DO NOT IMPLEMENT THE DATABASE OR ANY BUSINESS LOGIC IN THIS TASK.
