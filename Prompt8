@@ -1,0 +1,64 @@
+We have now confirmed that the EF Core model is valid.
+
+GET /health reaches NovaBankingDbContext successfully, but:
+
+CanConnectAsync() returns false
+
+and logs:
+
+"Health check: database connectivity check returned false"
+
+CanConnectAsync() is suppressing the underlying connection exception, so we need a temporary local diagnostic to determine the actual SQL connection failure.
+
+Make a TEMPORARY development-only diagnostic change to /health.
+
+Requirements:
+
+1. Keep the existing CanConnectAsync() check.
+
+2. If CanConnectAsync() returns false, attempt to explicitly open the underlying EF Core database connection using the DbConnection associated with NovaBankingDbContext, so that the underlying Microsoft.Data.SqlClient exception can be captured.
+
+3. Catch the exception and log the full exception object through ILogger so the local terminal shows:
+   - exception type
+   - SQL error message
+   - inner exception
+   - error number if available
+   - stack trace
+
+4. NEVER log:
+   - the connection string
+   - SQL password
+   - username if it is part of a secret
+   - PIN
+   - session token
+   - access token
+   - any other credential
+
+5. Do not return exception details through the HTTP response.
+
+6. Keep /health returning HTTP 503 when the database cannot be reached.
+
+7. Close/dispose the connection correctly after the diagnostic attempt. Do not leave an open connection.
+
+8. Do not modify:
+   - entities
+   - EF configurations
+   - DbContext model
+   - migrations
+   - seed data
+   - Azure resources
+   - connection string
+   - authentication
+   - authorization
+   - MCP
+   - RAG
+   - Semantic Kernel
+   - Azure OpenAI
+
+9. This is ONLY a temporary diagnostic change.
+
+10. Build the solution after the change.
+
+11. Tell me exactly which file was changed.
+
+Do not make any other changes.
