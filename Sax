@@ -1,0 +1,2 @@
+curl.exe -i -X POST [http://localhost:5146/api/auth/pin-login](http://localhost:5146/api/auth/pin-login)   -H "Content-Type: application/json"
+-d '{"customerNumber":"CUST0001","pin":"1111"}'
