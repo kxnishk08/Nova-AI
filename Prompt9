@@ -1,0 +1,130 @@
+We have now successfully verified that the local NovaBanking API can connect to the configured Azure SQL database.
+
+Proceed with PHASE 3: EF Core database migration and synthetic seed data.
+
+First inspect the current solution before making changes. Do not assume the previous migration/seed files are still correct because duplicate Persistence/Data implementations were previously removed.
+
+IMPORTANT ARCHITECTURE:
+
+Authoritative entities:
+src/NovaBanking.Application/Domain/Entities/
+
+Authoritative DbContext:
+src/NovaBanking.Infrastructure/Data/NovaBankingDbContext.cs
+
+Authoritative configurations:
+src/NovaBanking.Infrastructure/Data/Configurations/
+
+Requirements:
+
+1. Inspect the current authoritative EF Core model and determine whether an InitialCreate migration already exists.
+
+2. If an existing InitialCreate migration is valid and belongs to the authoritative DbContext, reuse it. Do NOT create a duplicate migration.
+
+3. If no valid migration exists, create an EF Core migration named:
+   InitialCreate
+
+4. The migration must create the case-study database tables:
+   - Customers
+   - CustomerCredentials
+   - CustomerSessions
+   - Accounts
+   - Transactions
+   - Loans
+   - CreditCards
+
+5. Verify all primary keys, foreign keys, indexes, unique constraints, required fields, nullable fields, decimal precision, dates, and delete behaviors against the current authoritative entity/configuration model.
+
+6. Add an idempotent development seed implementation under Infrastructure.
+
+7. Seed synthetic data only. Never use real personal/banking data.
+
+8. Seed exactly 3 demo customers:
+   CustomerNumber:
+   CUST0001
+   CUST0002
+   CUST0003
+
+9. Create demo credentials for those customers using ASP.NET Core PasswordHasher<T>.
+
+Demo PINs:
+   CUST0001 -> 1111
+   CUST0002 -> 2222
+   CUST0003 -> 3333
+
+NEVER store plaintext PINs in the database.
+
+10. Seed representative synthetic financial data for the customers, including:
+   - multiple accounts
+   - account balances
+   - recent transactions
+   - loans
+   - credit cards
+
+Use deterministic logical seed records so repeated seeding does not create duplicates.
+
+11. Preserve customer ownership relationships:
+   Customer -> Accounts
+   Customer -> Loans
+   Customer -> CreditCards
+   Customer -> CustomerCredentials
+   Customer -> CustomerSessions
+
+12. Use stable identifiers/business numbers where appropriate so seed execution is idempotent.
+
+13. Do not seed CustomerSessions with active authentication sessions unless the existing model explicitly requires it. Authentication/session creation will be implemented in the next phase.
+
+14. Do not store full sensitive-looking identifiers unnecessarily. Use masked synthetic card numbers where appropriate.
+
+15. Do not hardcode Azure credentials, SQL passwords, API keys, or connection strings.
+
+16. Database initialization:
+   - Do NOT use EnsureCreated().
+   - Do NOT use EnsureDeleted().
+   - Do NOT use DropDatabase().
+   - Do NOT automatically call Database.Migrate() during normal API startup.
+   - Migrations should be applied explicitly during this development phase.
+
+17. Remove/replace any old EnsureCreated-based seed initialization if it conflicts with the migration-based approach.
+
+18. Remove the temporary database diagnostic logging that was added to Program.cs once it is no longer needed. Keep /health as a simple safe connectivity check that returns no secrets.
+
+19. Add or update tests to verify:
+   - seed is idempotent
+   - 3 customers exist
+   - credentials contain hashes rather than plaintext PINs
+   - customer-owned records reference valid customers
+   - no duplicate business identifiers are created
+
+20. Build the entire solution.
+
+21. Run all tests.
+
+22. DO NOT add:
+   - authentication
+   - PIN login endpoint
+   - authorization
+   - MCP
+   - RAG
+   - Azure AI Search
+   - Semantic Kernel
+   - Azure OpenAI
+   - UI
+   - transfers/payments
+   - any other future-phase functionality
+
+23. Do not apply the migration to Azure SQL automatically from application startup.
+
+After implementation, report:
+- whether InitialCreate already existed or was newly generated
+- exact migration location
+- exact seed implementation location
+- entities/tables included
+- demo customer records created
+- confirmation that PINs are hashed
+- how idempotency is enforced
+- tests added/updated
+- build result
+- test result
+- exact command I should run to apply the migration to my configured Azure SQL database
+- exact command I should run to execute the seed
