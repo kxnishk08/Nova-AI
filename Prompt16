@@ -1,242 +1,190 @@
-PHASE 6C — REPLACE CUSTOM MCP PROTOCOL WITH OFFICIAL MCP C# SDK
+PHASE 6D — REPLACE THE LOCAL MCP SHIM WITH THE OFFICIAL MCP SDK
 
-The current NovaBanking.McpServer implementation is NOT using the official MCP SDK.
+The current NovaBanking.McpServer implementation uses a local/custom shim that imitates the ModelContextProtocol.AspNetCore API surface. This is NOT acceptable for the final case-study implementation.
 
-It currently implements custom endpoints:
-
-GET  /mcp/discover
-POST /mcp/invoke
-
-This is a custom HTTP tool protocol, not the actual Model Context Protocol.
-
-We need to replace the custom protocol with the official Microsoft-collaborated MCP C# SDK.
-
-Use the official package:
-
-ModelContextProtocol.AspNetCore
-
-This is an ASP.NET Core HTTP MCP server and the official SDK supports HTTP-based MCP servers.
-
-Reference:
-https://github.com/modelcontextprotocol/csharp-sdk
-
-==================================================
-CRITICAL CONSTRAINTS
-==================================================
-
-DO NOT change the existing banking domain/service architecture.
-
-Keep:
-
-MCP tool
-    ↓
-IBankingService
-    ↓
-ICurrentUserAccessor
-    ↓
-NB_SID server-side session
-    ↓
-CustomerId
-    ↓
-ownership check
-    ↓
-Azure SQL
-
-The MCP tools must NEVER accept CustomerId as an authorization parameter.
-
-Do NOT query EF Core directly from MCP tools.
-
-Do NOT bypass BankingService.
-
-Do NOT trust CustomerId supplied by an LLM/client.
-
-Do NOT hardcode CustomerId.
-
-==================================================
-1. INSTALL OFFICIAL MCP SDK
-==================================================
-
-Add the appropriate official NuGet package:
-
-ModelContextProtocol.AspNetCore
-
-Use the current stable version compatible with the project's target framework.
-
-Do NOT install unofficial MCP packages.
-
-Do NOT implement the MCP wire protocol manually.
-
-Do NOT create another custom /mcp/discover or /mcp/invoke protocol.
-
-==================================================
-2. IMPLEMENT REAL MCP SERVER
-==================================================
-
-Configure NovaBanking.McpServer using the official MCP ASP.NET Core integration.
-
-Use:
-
-AddMcpServer()
-
-and the appropriate HTTP transport configuration for the current SDK version.
-
-Use the SDK's actual MCP transport endpoint.
-
-Do not create a custom JSON transport.
-
-The server must support genuine MCP client discovery and tool invocation.
-
-==================================================
-3. MCP TOOLS
-==================================================
-
-Create actual MCP server tools using the official SDK's tool registration mechanism.
-
-Expose exactly:
-
-GetCustomerProfile()
-GetAccountSummary()
-GetAccountBalance(accountId)
-GetRecentTransactions(accountId, count)
-GetLoanSummary(loanId)
-GetCreditCardSummary(cardId)
-
-Use the SDK's McpServerTool / McpServerToolType mechanism or the current equivalent for the installed SDK version.
-
-Each tool must have:
-- proper MCP tool name
-- description
-- parameter schema
-- structured output
-- read-only behavior
-
-Use Description attributes where appropriate so the SDK generates correct tool metadata/schema.
-
-==================================================
-4. BANKING SERVICE
-==================================================
-
-Each MCP tool must call IBankingService.
-
-Example conceptual flow:
-
-[MCP GetAccountBalance]
-        ↓
-IBankingService.GetAccountBalanceAsync(accountId)
-        ↓
-ICurrentUserAccessor
-        ↓
-authenticated CustomerId
-        ↓
-ownership predicate
-        ↓
-Azure SQL
-
-Do not duplicate banking logic in the MCP layer.
-
-==================================================
-5. AUTHENTICATION
-==================================================
-
-Preserve the existing NB_SID server-side session architecture.
-
-The MCP request must be associated with an authenticated customer context.
-
-The MCP layer must not accept:
-
-customerId
-
-as a tool parameter.
-
-The resource IDs such as accountId, loanId and cardId are only selectors.
-
-BankingService remains responsible for checking ownership.
-
-If the official MCP HTTP transport has a request/HttpContext integration mechanism, use it to access the existing authenticated context.
-
-If the MCP SDK's transport changes how HttpContext is exposed, implement the minimal secure adapter needed for ICurrentUserAccessor.
-
-Do NOT weaken authentication to make MCP work.
-
-==================================================
-6. REMOVE CUSTOM PROTOCOL
-==================================================
-
-Remove or disable the custom:
-
-McpProtocolController
-/mcp/discover
-/mcp/invoke
-
-implementation.
-
-Do not leave two competing MCP implementations.
-
-The final NovaBanking.McpServer should have ONE real MCP implementation.
-
-The old McpToolsController may also be removed if it is only duplicate REST tooling and is no longer needed.
-
-Do not remove BankingService or any application-layer functionality.
-
-==================================================
-7. TESTING
-==================================================
-
-Update tests to test the actual MCP implementation rather than testing the custom controller.
-
-Tests must verify:
-
-- MCP server starts
-- MCP client can connect using the supported HTTP transport
-- MCP tool discovery returns all six tools
-- GetCustomerProfile works
-- GetAccountSummary works
-- GetAccountBalance works
-- GetRecentTransactions works
-- GetLoanSummary works
-- GetCreditCardSummary works
-- unauthenticated requests are rejected
-- another customer's resources cannot be accessed
-- CustomerId cannot be supplied to override authenticated identity
-- sensitive data is not exposed
-
-Use the official SDK's testing/client facilities where practical.
-
-Do not merely unit-test a custom controller.
-
-==================================================
-8. BUILD / TEST
-==================================================
-
-Run:
-
-dotnet build
-
-dotnet test
-
-Fix all compilation and test failures.
-
-==================================================
-9. FINAL REPORT
-==================================================
-
-Report:
-
-1. Exact ModelContextProtocol package/version installed
-2. Exact MCP HTTP transport used
-3. Exact MCP endpoint exposed by the SDK
-4. How the six tools are registered
-5. How tool discovery works
-6. How tool invocation works
-7. How NB_SID reaches ICurrentUserAccessor
-8. How ownership is enforced
-9. Which custom MCP files/endpoints were removed
-10. Tests added/updated
-11. Build result
-12. Test result
+Replace the shim with the REAL official ModelContextProtocol.AspNetCore NuGet package and wire the MCP server using the actual SDK.
 
 IMPORTANT:
+- Do NOT create another custom MCP implementation.
+- Do NOT emulate MCP with custom JSON endpoints.
+- Do NOT implement a fake AddMcpServer/UseMcpServer API.
+- Use the official Model Context Protocol C# SDK package.
+- Keep the existing secure authentication and authorization architecture unchanged.
+- Do not add CustomerId parameters to any MCP tool.
 
-Do not proceed to RAG, Azure AI Search, Azure OpenAI, or Semantic Kernel.
+TASKS
 
-Stop after genuine MCP implementation and verification.
+1. Inspect the current NovaBanking.McpServer project and identify:
+   - the local MCP shim files/classes
+   - fake AddMcpServer / UseMcpServer implementations
+   - fake MCP registry/transport implementations
+   - current MCP tool classes
+   - current MCP tests
+
+2. Add the official NuGet package:
+
+   ModelContextProtocol.AspNetCore
+
+   Use the latest stable package version that is compatible with the project's target framework and available in the configured NuGet sources.
+
+   Do NOT guess the version.
+   Verify the package actually resolves successfully with dotnet restore.
+
+3. Remove the local MCP shim completely.
+
+   Search the entire solution for:
+   - fake AddMcpServer
+   - fake UseMcpServer
+   - custom MCP protocol/transport implementations
+   - custom MCP registry implementations
+
+   Delete them if they exist and are only supporting the shim.
+
+4. Configure NovaBanking.McpServer using the REAL official SDK.
+
+   Use the official ASP.NET Core MCP server registration and HTTP transport provided by ModelContextProtocol.AspNetCore.
+
+   Follow the actual SDK API available in the installed package rather than inventing APIs.
+
+5. Implement the six required MCP tools using the official MCP SDK tool registration mechanism.
+
+   Required tools:
+
+   - SearchBankingKnowledge(question)
+   - GetCustomerProfile()
+   - GetAccountSummary()
+   - GetAccountBalance(accountId)
+   - GetRecentTransactions(accountId, count)
+   - GetLoanSummary(loanId)
+   - GetCreditCardSummary(cardId)
+
+   Note: The case study lists seven tool names, despite describing the MCP tool layer generally. Implement ALL seven listed tools.
+
+6. Tool security requirements:
+
+   NEVER expose CustomerId as a tool parameter.
+
+   The following must remain authoritative:
+
+   MCP tool
+       ↓
+   IBankingService
+       ↓
+   ICurrentUserAccessor
+       ↓
+   NB_SID server-side session
+       ↓
+   authenticated CustomerId
+       ↓
+   ownership-filtered database query
+
+   The LLM must never be able to choose the CustomerId.
+
+   Do not trust CustomerId supplied through:
+   - tool arguments
+   - chat messages
+   - MCP arguments
+   - request body
+   - query string
+
+7. MCP tools must NOT directly query EF Core/DbContext.
+
+   They should call the existing IBankingService abstraction.
+
+   BankingService remains responsible for:
+   - authenticated customer resolution
+   - ownership enforcement
+   - account/loan/card access checks
+   - DTO projection
+   - database access
+
+8. Preserve the existing NB_SID authentication mechanism.
+
+   The MCP server must be able to resolve the authenticated server-side session/customer context correctly.
+
+   If MCP HTTP requests require explicit propagation of the existing authentication/session context, implement that securely.
+
+   Do NOT move authentication responsibility into the LLM or MCP tool arguments.
+
+9. Preserve all existing read-only restrictions.
+
+   MCP must NOT expose:
+   - transfers
+   - payments
+   - card blocking
+   - PIN changes
+   - credit decisions
+   - account modifications
+   - any other state-changing banking operation
+
+10. MCP tool schemas must be generated by the official SDK.
+
+   Do not manually create fake schemas unless the official SDK requires explicit schema configuration.
+
+11. Verify the actual MCP transport.
+
+   Confirm that the implementation uses the official MCP HTTP transport from ModelContextProtocol.AspNetCore.
+
+   Do not retain custom endpoints such as:
+   - /mcp/discover
+   - /mcp/invoke
+
+   unless they are actually created by the official SDK itself.
+
+12. Update tests.
+
+   Add/update tests proving:
+
+   A. MCP server starts successfully.
+
+   B. Official MCP tool registration discovers all seven required tools.
+
+   C. Tool names and parameters are correct.
+
+   D. CustomerId is NOT present in any protected tool's input schema.
+
+   E. Authenticated requests resolve the CustomerId from NB_SID/session context.
+
+   F. An authenticated customer can access their own accounts/loans/cards.
+
+   G. Cross-customer access is rejected.
+
+   H. Unauthenticated access is rejected.
+
+   I. Read-only restrictions remain intact.
+
+13. Do not weaken security simply to make MCP tests pass.
+
+14. Run:
+
+   dotnet restore
+   dotnet build
+   dotnet test
+
+15. Inspect the final project to ensure no local MCP shim remains.
+
+16. Report EXACTLY:
+
+   - official NuGet package name
+   - installed package version
+   - whether restore succeeded
+   - exact MCP SDK registration used
+   - exact HTTP transport used
+   - MCP endpoint exposed by the official SDK
+   - names of all seven registered tools
+   - how authenticated CustomerId reaches the tools
+   - how ownership enforcement is performed
+   - files deleted from the shim implementation
+   - tests added/updated
+   - final build result
+   - final test result
+
+CRITICAL:
+If the official package cannot be restored because NuGet/network/package-source access is unavailable, DO NOT create another shim.
+
+Instead:
+1. leave the current code untouched,
+2. report the exact restore error,
+3. tell me what package/source issue prevents installation.
+
+The goal is a genuine implementation using the official ModelContextProtocol.AspNetCore SDK, not an imitation of its API.
