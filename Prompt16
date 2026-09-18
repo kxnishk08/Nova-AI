@@ -1,0 +1,234 @@
+PHASE 6B — VERIFY AND IMPLEMENT ACTUAL MCP PROTOCOL
+
+We have completed the banking service layer and currently have endpoints under:
+
+/mcp/Tools/...
+
+However, before proceeding to RAG/Azure AI Search, verify whether NovaBanking.McpServer is actually implementing the Model Context Protocol (MCP), or whether it is only exposing ordinary ASP.NET Core REST controller endpoints.
+
+IMPORTANT:
+Do not assume that an ASP.NET controller called "McpToolsController" is an MCP implementation.
+
+Inspect the current codebase and determine whether the project:
+- implements an actual MCP server
+- exposes MCP tools through an MCP-compatible transport/protocol
+- uses an appropriate .NET MCP SDK/package
+- exposes tool metadata/schema in the MCP format
+- supports MCP tool discovery/invocation
+
+If the current implementation is only REST endpoints, convert the MCP server to a genuine MCP implementation while preserving the existing secure architecture.
+
+==================================================
+REQUIRED MCP TOOLS
+==================================================
+
+Expose these actual MCP tools:
+
+GetCustomerProfile()
+GetAccountSummary()
+GetAccountBalance(accountId)
+GetRecentTransactions(accountId, count)
+GetLoanSummary(loanId)
+GetCreditCardSummary(cardId)
+
+Do NOT add:
+- transfers
+- payments
+- card blocking
+- PIN changes
+- credit decisions
+- account mutations
+- loan mutations
+- credit-card mutations
+
+==================================================
+SECURITY
+==================================================
+
+CRITICAL:
+
+The LLM/MCP caller must NEVER supply CustomerId as an authorization identity.
+
+CustomerId must continue to come from authenticated server-side context.
+
+The MCP tool must call the existing IBankingService.
+
+The architecture must remain:
+
+MCP Tool
+    ↓
+IBankingService
+    ↓
+ICurrentUserAccessor
+    ↓
+authenticated server-side session
+    ↓
+CustomerId
+    ↓
+ownership predicate
+    ↓
+Azure SQL
+
+Do NOT:
+- query EF Core directly from MCP
+- accept CustomerId as a tool parameter
+- trust CustomerId from the LLM
+- hardcode CustomerId
+- bypass BankingService
+- bypass ownership checks
+- replace server-side sessions with JWTs
+- weaken authentication
+
+==================================================
+AUTHENTICATED CONTEXT
+==================================================
+
+The existing architecture uses NB_SID.
+
+Inspect how the MCP server receives authenticated context.
+
+If the MCP server receives the NB_SID cookie directly, validate it server-side exactly as the existing CurrentUserAccessor does.
+
+If actual MCP transport does not naturally support the existing cookie/session mechanism, DO NOT create a security bypass.
+
+Instead implement the minimal server-side authenticated bridge/context necessary to preserve:
+
+"CustomerId is derived from authenticated server-side state."
+
+Document the exact mechanism.
+
+Never allow the MCP client or LLM to choose the customer identity.
+
+==================================================
+MCP TOOL DEFINITIONS
+==================================================
+
+Each tool needs:
+- tool name
+- clear description
+- parameter schema where applicable
+- read-only behavior
+- safe structured output
+
+Tool parameters:
+
+GetCustomerProfile:
+No parameters.
+
+GetAccountSummary:
+No parameters.
+
+GetAccountBalance:
+accountId
+
+GetRecentTransactions:
+accountId
+count
+
+GetLoanSummary:
+loanId
+
+GetCreditCardSummary:
+cardId
+
+Resource IDs are only resource selectors.
+
+They are NOT authorization credentials.
+
+==================================================
+REST CONTROLLERS
+==================================================
+
+Determine whether the existing:
+
+src/NovaBanking.McpServer/Controllers/McpToolsController.cs
+
+is still needed.
+
+If actual MCP replaces those endpoints, do not maintain two independent implementations of the same business operations unless there is a clear reason.
+
+Avoid duplicated authorization/business logic.
+
+The BankingService remains the single source of banking business logic.
+
+==================================================
+PACKAGE / SDK
+==================================================
+
+Inspect the current project and use the appropriate current .NET MCP SDK/package.
+
+Do not blindly install random packages.
+
+Use the official/appropriate MCP .NET implementation compatible with this project and target framework.
+
+Keep the MCP implementation minimal and suitable for the case-study prototype.
+
+==================================================
+TESTING
+==================================================
+
+Update/add tests to verify:
+
+1. MCP server starts successfully.
+
+2. MCP tool discovery exposes:
+   GetCustomerProfile
+   GetAccountSummary
+   GetAccountBalance
+   GetRecentTransactions
+   GetLoanSummary
+   GetCreditCardSummary
+
+3. Tool invocation calls the BankingService.
+
+4. An authenticated customer can access their own data.
+
+5. A customer cannot access another customer's resources.
+
+6. CustomerId cannot be supplied by the MCP caller to override authenticated identity.
+
+7. Unauthenticated invocation is rejected.
+
+8. Sensitive data is not returned.
+
+9. Read-only restrictions are preserved.
+
+10. Tool schemas correctly expose only the intended parameters.
+
+==================================================
+BUILD
+==================================================
+
+Run:
+
+dotnet build
+
+dotnet test
+
+Do not implement:
+- Azure OpenAI
+- Semantic Kernel
+- Azure AI Search
+- RAG
+- chat UI
+
+==================================================
+FINAL REPORT
+==================================================
+
+Clearly report:
+
+1. Was the previous implementation actual MCP or ordinary REST?
+2. What MCP SDK/package is being used?
+3. What MCP transport is being used?
+4. How MCP tool discovery works.
+5. How MCP tool invocation works.
+6. How authenticated CustomerId reaches the BankingService.
+7. How ownership is enforced.
+8. Whether McpToolsController remains necessary.
+9. Files created/modified.
+10. Tests added.
+11. Build result.
+12. Test result.
+
+Do not proceed to Phase 7.
