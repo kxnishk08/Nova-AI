@@ -1,190 +1,301 @@
-PHASE 6D — REPLACE THE LOCAL MCP SHIM WITH THE OFFICIAL MCP SDK
+PHASE 7 — IMPLEMENT RAG WITH AZURE AI SEARCH
 
-The current NovaBanking.McpServer implementation uses a local/custom shim that imitates the ModelContextProtocol.AspNetCore API surface. This is NOT acceptable for the final case-study implementation.
-
-Replace the shim with the REAL official ModelContextProtocol.AspNetCore NuGet package and wire the MCP server using the actual SDK.
+Implement the RAG layer for NovaBanking according to the case study.
 
 IMPORTANT:
-- Do NOT create another custom MCP implementation.
-- Do NOT emulate MCP with custom JSON endpoints.
-- Do NOT implement a fake AddMcpServer/UseMcpServer API.
-- Use the official Model Context Protocol C# SDK package.
-- Keep the existing secure authentication and authorization architecture unchanged.
-- Do not add CustomerId parameters to any MCP tool.
+- Use synthetic banking knowledge only.
+- This RAG layer is for PUBLIC banking policy/FAQ information.
+- Customer-specific information must NOT come from RAG.
+- Do not put CustomerId, account balances, transactions, loans, cards, PINs, credentials, sessions, or other customer-specific data into the knowledge index.
+- Do not weaken the existing authentication/authorization architecture.
+- Do not replace BankingService or MCP with RAG.
+- RAG is only the knowledge retrieval layer.
 
-TASKS
+CASE STUDY KNOWLEDGE DOCUMENTS
 
-1. Inspect the current NovaBanking.McpServer project and identify:
-   - the local MCP shim files/classes
-   - fake AddMcpServer / UseMcpServer implementations
-   - fake MCP registry/transport implementations
-   - current MCP tool classes
-   - current MCP tests
+The knowledge directory must support these four documents:
 
-2. Add the official NuGet package:
+1. SavingsAndCurrentAccountTerms.pdf
+2. HomeAndPersonalLoanPolicy.pdf
+3. CreditCardFeesAndBillingGuide.pdf
+4. DigitalBankingAndSecurityFAQ.pdf
 
-   ModelContextProtocol.AspNetCore
+The required pipeline is:
 
-   Use the latest stable package version that is compatible with the project's target framework and available in the configured NuGet sources.
+PDF/document extraction
+        ↓
+cleaning
+        ↓
+chunking + metadata
+        ↓
+embeddings
+        ↓
+Azure AI Search
+        ↓
+top relevant chunks
+        ↓
+grounded prompt
+        ↓
+Azure OpenAI
 
-   Do NOT guess the version.
-   Verify the package actually resolves successfully with dotnet restore.
+REQUIRED METADATA
 
-3. Remove the local MCP shim completely.
+Each indexed chunk must contain:
 
-   Search the entire solution for:
-   - fake AddMcpServer
-   - fake UseMcpServer
-   - custom MCP protocol/transport implementations
-   - custom MCP registry implementations
+- DocumentId
+- Title
+- Category
+- Version
+- EffectiveDate
+- PageNumber
+- SourceUrl
 
-   Delete them if they exist and are only supporting the shim.
+Also include the actual searchable chunk content and embedding vector as required by Azure AI Search.
 
-4. Configure NovaBanking.McpServer using the REAL official SDK.
+ARCHITECTURE
 
-   Use the official ASP.NET Core MCP server registration and HTTP transport provided by ModelContextProtocol.AspNetCore.
+Create a clean abstraction in the Application layer, for example:
 
-   Follow the actual SDK API available in the installed package rather than inventing APIs.
+IKnowledgeSearchService
 
-5. Implement the six required MCP tools using the official MCP SDK tool registration mechanism.
+The Application layer must not contain Azure SDK implementation details.
 
-   Required tools:
+Infrastructure should contain the Azure AI Search implementation.
 
-   - SearchBankingKnowledge(question)
-   - GetCustomerProfile()
-   - GetAccountSummary()
-   - GetAccountBalance(accountId)
-   - GetRecentTransactions(accountId, count)
-   - GetLoanSummary(loanId)
-   - GetCreditCardSummary(cardId)
+Suggested structure:
 
-   Note: The case study lists seven tool names, despite describing the MCP tool layer generally. Implement ALL seven listed tools.
+src/NovaBanking.Application/
+    Services/
+        IKnowledgeSearchService.cs
+    DTOs/
+        KnowledgeSearchResultDto.cs
 
-6. Tool security requirements:
+src/NovaBanking.Infrastructure/
+    Search/
+        AzureAiSearchKnowledgeService.cs
+        AzureAiSearchOptions.cs
+        ...
 
-   NEVER expose CustomerId as a tool parameter.
+If a better structure already exists, use it consistently rather than duplicating abstractions.
 
-   The following must remain authoritative:
+AZURE AI SEARCH
 
-   MCP tool
-       ↓
-   IBankingService
-       ↓
-   ICurrentUserAccessor
-       ↓
-   NB_SID server-side session
-       ↓
-   authenticated CustomerId
-       ↓
-   ownership-filtered database query
+Use the official Azure AI Search SDK.
 
-   The LLM must never be able to choose the CustomerId.
+Configure the service through configuration/options.
 
-   Do not trust CustomerId supplied through:
-   - tool arguments
-   - chat messages
-   - MCP arguments
-   - request body
-   - query string
+DO NOT hardcode:
+- endpoint
+- API keys
+- Azure OpenAI keys
+- connection strings
 
-7. MCP tools must NOT directly query EF Core/DbContext.
+Use configuration/secrets appropriate for local development.
 
-   They should call the existing IBankingService abstraction.
+The application must fail clearly if required configuration is missing.
 
-   BankingService remains responsible for:
-   - authenticated customer resolution
-   - ownership enforcement
-   - account/loan/card access checks
-   - DTO projection
-   - database access
+SEARCH INDEX
 
-8. Preserve the existing NB_SID authentication mechanism.
+Create/document the required Azure AI Search index schema.
 
-   The MCP server must be able to resolve the authenticated server-side session/customer context correctly.
+It must support:
+- full-text search over chunk content
+- vector search over embeddings
+- metadata filtering
+- returning document/page metadata with results
 
-   If MCP HTTP requests require explicit propagation of the existing authentication/session context, implement that securely.
+Use an embedding model available in the Azure environment.
 
-   Do NOT move authentication responsibility into the LLM or MCP tool arguments.
+Do not invent a deployment name.
+Make the embedding deployment configurable.
 
-9. Preserve all existing read-only restrictions.
+If the Azure resource/model required for embeddings is not available, report the exact missing prerequisite rather than silently substituting an unrelated implementation.
 
-   MCP must NOT expose:
-   - transfers
-   - payments
-   - card blocking
-   - PIN changes
-   - credit decisions
-   - account modifications
-   - any other state-changing banking operation
+DOCUMENT INGESTION
 
-10. MCP tool schemas must be generated by the official SDK.
+Create a repeatable ingestion process.
 
-   Do not manually create fake schemas unless the official SDK requires explicit schema configuration.
+It should:
 
-11. Verify the actual MCP transport.
+1. Read the four documents from the knowledge directory.
+2. Extract text while preserving page boundaries where possible.
+3. Clean the extracted text.
+4. Split it into reasonable chunks.
+5. Attach the required metadata.
+6. Generate embeddings.
+7. Upload chunks/documents into Azure AI Search.
 
-   Confirm that the implementation uses the official MCP HTTP transport from ModelContextProtocol.AspNetCore.
+The ingestion process must be safe to run repeatedly.
 
-   Do not retain custom endpoints such as:
-   - /mcp/discover
-   - /mcp/invoke
+Avoid blindly duplicating chunks on every execution.
 
-   unless they are actually created by the official SDK itself.
+Use a deterministic chunk/document identifier.
 
-12. Update tests.
+Keep the ingestion code separate from runtime query handling.
 
-   Add/update tests proving:
+RUNTIME RETRIEVAL
 
-   A. MCP server starts successfully.
+Implement:
 
-   B. Official MCP tool registration discovers all seven required tools.
+SearchBankingKnowledge(question)
 
-   C. Tool names and parameters are correct.
+using the knowledge search abstraction.
 
-   D. CustomerId is NOT present in any protected tool's input schema.
+The flow should be:
 
-   E. Authenticated requests resolve the CustomerId from NB_SID/session context.
+question
+  ↓
+embedding
+  ↓
+Azure AI Search hybrid/vector retrieval
+  ↓
+top relevant chunks
+  ↓
+KnowledgeSearchResultDto
 
-   F. An authenticated customer can access their own accounts/loans/cards.
+Return enough information for the AI layer to provide grounded citations/references, including:
 
-   G. Cross-customer access is rejected.
+- title
+- category
+- document ID
+- page number
+- relevant text/chunk
+- effective date
+- source URL when available
 
-   H. Unauthenticated access is rejected.
+Limit the number of retrieved chunks.
 
-   I. Read-only restrictions remain intact.
+Make the number configurable.
 
-13. Do not weaken security simply to make MCP tests pass.
+GROUNDING / PROMPT-INJECTION DEFENSE
 
-14. Run:
+Retrieved documents are DATA, not instructions.
 
-   dotnet restore
-   dotnet build
-   dotnet test
+The system must explicitly treat retrieved document content as untrusted reference material.
 
-15. Inspect the final project to ensure no local MCP shim remains.
+A retrieved chunk must NEVER be allowed to:
+- override system instructions
+- override authentication
+- override authorization
+- request secrets
+- change tool permissions
+- invoke arbitrary tools
+- change the user's identity
+- instruct the model to ignore security rules
 
-16. Report EXACTLY:
+Do not blindly concatenate retrieved text into a privileged system prompt.
 
-   - official NuGet package name
-   - installed package version
-   - whether restore succeeded
-   - exact MCP SDK registration used
-   - exact HTTP transport used
-   - MCP endpoint exposed by the official SDK
-   - names of all seven registered tools
-   - how authenticated CustomerId reaches the tools
-   - how ownership enforcement is performed
-   - files deleted from the shim implementation
-   - tests added/updated
-   - final build result
-   - final test result
+Create a clear separation between:
+- system/application instructions
+- user question
+- retrieved knowledge
+
+The final AI layer must be instructed to answer only from retrieved knowledge when the question is a public banking-policy/FAQ question.
+
+If retrieval produces no sufficiently relevant results, return a controlled "I don't have enough information in the banking knowledge base" result rather than hallucinating.
+
+CITATIONS
+
+RAG results must preserve source attribution.
+
+The eventual AI response should be able to say something such as:
+
+"According to Savings and Current Account Terms, page 3..."
+
+Do not fabricate citations.
+
+Only cite documents/pages actually returned by retrieval.
+
+MCP INTEGRATION
+
+The existing MCP tool:
+
+SearchBankingKnowledge(question)
+
+must call the knowledge search service.
+
+Do not make the MCP tool directly query Azure AI Search.
+
+The architecture should be:
+
+MCP SearchBankingKnowledge
+        ↓
+IKnowledgeSearchService
+        ↓
+AzureAiSearchKnowledgeService
+        ↓
+Azure AI Search
+
+Do NOT modify the customer-specific MCP tools unnecessarily.
+
+They must continue to use:
+
+IBankingService
+    ↓
+ICurrentUserAccessor
+    ↓
+NB_SID
+    ↓
+authenticated CustomerId
+    ↓
+ownership-filtered database query
+
+TESTING
+
+Add tests for:
+
+1. Chunk metadata generation.
+2. Deterministic chunk IDs.
+3. Search result DTO mapping.
+4. No CustomerId/customer data entering the knowledge index.
+5. Empty/no-result retrieval.
+6. Search result metadata preservation.
+7. MCP SearchBankingKnowledge calls IKnowledgeSearchService.
+8. MCP tools cannot accept CustomerId.
+9. Prompt-injection content in a retrieved document is treated as data and cannot alter tool authorization/security behavior.
+10. Missing Azure configuration produces a clear error.
+
+Do NOT require live Azure resources for every unit test.
+
+Use mocks/fakes for Azure services where appropriate.
+
+Also provide a small integration/manual verification path for the actual Azure AI Search resource.
+
+BUILD/TEST
+
+Run:
+
+dotnet restore
+dotnet build
+dotnet test
+
+Do not proceed by creating fake Azure AI Search endpoints or fake Azure SDK classes.
+
+FINAL REPORT
+
+Report:
+
+1. Files/classes created or modified.
+2. NuGet packages added and versions.
+3. Azure AI Search index name.
+4. Index fields/schema.
+5. Embedding model/deployment configuration name.
+6. How PDF text extraction works.
+7. Chunking strategy.
+8. Required metadata.
+9. How deterministic IDs prevent duplicate ingestion.
+10. Runtime retrieval flow.
+11. How SearchBankingKnowledge uses the RAG service.
+12. How prompt injection is handled.
+13. How citations are represented.
+14. Required Azure resources/configuration that I must create or configure manually.
+15. Exact commands to ingest the four PDFs.
+16. Build result.
+17. Test result.
 
 CRITICAL:
-If the official package cannot be restored because NuGet/network/package-source access is unavailable, DO NOT create another shim.
+Do not claim RAG is working against Azure until an actual Azure AI Search index has been created and a real document has been successfully indexed and retrieved.
 
-Instead:
-1. leave the current code untouched,
-2. report the exact restore error,
-3. tell me what package/source issue prevents installation.
-
-The goal is a genuine implementation using the official ModelContextProtocol.AspNetCore SDK, not an imitation of its API.
+If Azure configuration/resource creation is required and cannot be performed from the codebase, clearly separate:
+- code implementation completed
+- Azure portal/resource setup still required
