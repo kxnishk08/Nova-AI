@@ -1,3 +1,11 @@
-Invoke-WebRequest -Uri "http://localhost:5146/api/auth/pin-login" -Method Post -ContentType "application/json" -Body $body -WebSession $session
+dotnet user-secrets set "AzureAiSearch:ApiKey" "YOUR_SEARCH_ADMIN_KEY" --project .\src\NovaBanking.Api\NovaBanking.Api.csproj
 
-Invoke-RestMethod -Uri "http://localhost:5146/api/banking/accounts" -Method Get -WebSession $session
+dotnet user-secrets set "AzureAiSearch:IndexName" "nova-banking-knowledge-index" --project .\src\NovaBanking.Api\NovaBanking.Api.csproj
+
+dotnet user-secrets set "AzureAiSearch:EmbeddingDeployment" "text-embedding-3-small" --project .\src\NovaBanking.Api\NovaBanking.Api.csproj
+
+dotnet user-secrets set "AzureAiSearch:OpenAiEndpoint" "https://novaai2026.openai.azure.com/" --project .\src\NovaBanking.Api\NovaBanking.Api.csproj
+
+dotnet user-secrets set "AzureAiSearch:OpenAiApiKey" "YOUR_OPENAI_KEY" --project .\src\NovaBanking.Api\NovaBanking.Api.csproj
+
+dotnet user-secrets list --project .\src\NovaBanking.Api\NovaBanking.Api.csproj
