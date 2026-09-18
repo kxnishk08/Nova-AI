@@ -1,0 +1,67 @@
+We have confirmed the following behavior:
+
+1. POST /api/auth/pin-login succeeds with HTTP 200.
+2. The response sets the NB_SID authentication cookie.
+3. The cookie is configured with:
+   Secure
+   HttpOnly
+   SameSite=Strict
+4. The API is currently being tested over:
+   http://localhost:5146
+5. A subsequent request using the same PowerShell WebRequestSession:
+   GET /api/banking/accounts
+   returns 401 Unauthorized.
+
+Diagnose and fix this local-development cookie transport issue.
+
+IMPORTANT:
+Do not weaken production security.
+
+Requirements:
+
+1. Inspect the current authentication cookie configuration.
+
+2. For Development environment only, configure the authentication/session cookie SecurePolicy appropriately so it can be tested over the current local HTTP endpoint.
+
+3. In Production, the cookie MUST remain Secure/Always.
+
+4. Keep:
+   - HttpOnly
+   - SameSite=Strict (unless the existing architecture requires otherwise)
+   - short expiration
+   - server-side session storage
+   - hashed session token
+   - server-derived CustomerId
+
+5. Do NOT return the raw session token in the response body.
+
+6. Do NOT modify authorization or ownership logic.
+
+7. Do NOT replace the server-side session architecture with JWTs.
+
+8. Do NOT disable authentication.
+
+9. Do NOT make the cookie non-HttpOnly.
+
+10. Do NOT make the production cookie insecure.
+
+11. Add an appropriate development configuration/comment explaining that the relaxed SecurePolicy exists only because the current local development endpoint uses HTTP.
+
+12. Build and run the existing tests.
+
+13. Report the exact file and configuration changed.
+
+After the fix, the following flow must work:
+
+POST http://localhost:5146/api/auth/pin-login
+with CUST0001 / 1111
+→ 200
+→ NB_SID cookie
+
+Then using the same WebRequestSession:
+
+GET http://localhost:5146/api/banking/accounts
+→ 200
+→ CUST0001 account data
+
+Do not implement Phase 6/MCP yet.
