@@ -3,9 +3,8 @@ $body = @{
     pin = "1111"
 } | ConvertTo-Json
 
-Invoke-WebRequest `
+Invoke-RestMethod `
     -Uri "http://localhost:5146/api/auth/pin-login" `
     -Method Post `
     -ContentType "application/json" `
-    -Body $body `
-    -WebSession $session
+    -Body $body
