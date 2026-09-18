@@ -3,19 +3,8 @@ $body = @{
     pin = "1111"
 } | ConvertTo-Json
 
-try {
-    $response = Invoke-WebRequest `
-        -Uri "http://localhost:5146/api/auth/pin-login" `
-        -Method Post `
-        -ContentType "application/json" `
-        -Body $body
-
-    Write-Host "STATUS: $($response.StatusCode)"
-    Write-Host "BODY: $($response.Content)"
-}
-catch {
-    Write-Host "STATUS: $([int]$_.Exception.Response.StatusCode)"
-    $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-    Write-Host "BODY:"
-    Write-Host $reader.ReadToEnd()
-}
+Invoke-RestMethod `
+    -Uri "http://localhost:5146/api/auth/pin-login" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Body $body
