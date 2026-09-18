@@ -1,0 +1,311 @@
+PHASE 5 — READ-ONLY BANKING SERVICES + PROTECTED API
+
+The following are already complete and working:
+- ASP.NET Core solution
+- EF Core domain model
+- Azure SQL connection
+- InitialCreate migration applied
+- Synthetic database seed completed
+- PIN authentication
+- Server-side CustomerSession
+- Secure HttpOnly authentication cookie
+- Current authenticated customer resolution
+
+Do NOT redo or redesign any of those.
+
+Before making changes, inspect the current solution and understand the existing authentication/session implementation.
+
+GOAL:
+
+Implement the read-only banking application layer that will later be consumed by both REST APIs and MCP tools.
+
+SECURITY REQUIREMENT — CRITICAL:
+
+For every customer-specific operation, CustomerId MUST come exclusively from the authenticated server-side session.
+
+NEVER trust CustomerId supplied through:
+- request body
+- query parameters
+- route parameters
+- headers
+- chat messages
+- LLM-generated arguments
+
+The authenticated session is the sole source of the current CustomerId.
+
+==================================================
+1. APPLICATION SERVICES
+==================================================
+
+Create appropriate interfaces and implementations for these operations:
+
+- GetCustomerProfile()
+- GetAccountSummary()
+- GetAccountBalance(accountId)
+- GetRecentTransactions(accountId, count)
+- GetLoanSummary(loanId)
+- GetCreditCardSummary(cardId)
+
+Keep business logic in the Application layer.
+
+Use the existing Infrastructure DbContext through the established architecture.
+
+Do not expose EF Core entities directly from API responses.
+
+Create appropriate DTOs/read models.
+
+Use AsNoTracking() for read-only queries where appropriate.
+
+==================================================
+2. CUSTOMER PROFILE
+==================================================
+
+GetCustomerProfile() must return the authenticated customer's own profile.
+
+It must obtain CustomerId from the current authenticated session.
+
+Do not accept CustomerId from the caller.
+
+==================================================
+3. ACCOUNT OPERATIONS
+==================================================
+
+Implement:
+
+GetAccountSummary()
+
+Return the authenticated customer's accounts and appropriate account information.
+
+Implement:
+
+GetAccountBalance(accountId)
+
+Before returning anything, verify that the requested account belongs to the authenticated customer.
+
+Conceptually the query must enforce:
+
+Account.Id == accountId
+AND
+Account.CustomerId == authenticatedCustomerId
+
+If the account does not belong to the customer, do not return its information.
+
+Implement:
+
+GetRecentTransactions(accountId, count)
+
+The account must first be verified as belonging to the authenticated customer.
+
+Then return recent transactions for that account.
+
+Apply a sensible maximum to count so a caller cannot request an unbounded amount of data.
+
+==================================================
+4. LOAN OPERATIONS
+==================================================
+
+Implement:
+
+GetLoanSummary(loanId)
+
+Verify:
+
+Loan.Id == loanId
+AND
+Loan.CustomerId == authenticatedCustomerId
+
+Never allow access to another customer's loan.
+
+==================================================
+5. CREDIT CARD OPERATIONS
+==================================================
+
+Implement:
+
+GetCreditCardSummary(cardId)
+
+Verify:
+
+CreditCard.Id == cardId
+AND
+CreditCard.CustomerId == authenticatedCustomerId
+
+Never allow access to another customer's credit card.
+
+Mask sensitive identifiers in returned data.
+
+==================================================
+6. REST API
+==================================================
+
+Add protected API endpoints:
+
+GET /api/accounts
+
+GET /api/loans
+
+GET /api/credit-cards
+
+Add appropriate endpoints for:
+
+- customer profile
+- account balance
+- recent transactions
+- loan summary
+- credit card summary
+
+Use the existing authentication/session infrastructure.
+
+Unauthenticated requests must receive:
+
+401 Unauthorized
+
+Authenticated requests must only receive data belonging to the authenticated customer.
+
+Do NOT add CustomerId to these routes as a client-controlled authorization mechanism.
+
+For example, do NOT implement:
+
+GET /api/customers/{customerId}/accounts
+
+where customerId determines authorization.
+
+==================================================
+7. ERROR HANDLING
+==================================================
+
+Use safe responses.
+
+Do not expose:
+- SQL exceptions
+- connection strings
+- database credentials
+- PIN hashes
+- session tokens
+- internal stack traces
+
+For a resource belonging to another customer, prefer a safe not-found/unauthorized response that does not reveal whether the resource exists for another customer.
+
+==================================================
+8. READ-ONLY REQUIREMENT
+==================================================
+
+This phase must remain strictly read-only.
+
+DO NOT implement:
+
+- transfers
+- payments
+- money movement
+- card blocking
+- PIN changes
+- credit decisions
+- account creation
+- loan modification
+- credit-card modification
+- any other banking mutation
+
+==================================================
+9. MCP PREPARATION
+==================================================
+
+Design the application services so the future MCP server can call them directly.
+
+The future MCP tools will correspond to:
+
+SearchBankingKnowledge(question)
+GetCustomerProfile()
+GetAccountSummary()
+GetAccountBalance(accountId)
+GetRecentTransactions(accountId, count)
+GetLoanSummary(loanId)
+GetCreditCardSummary(cardId)
+
+Do NOT implement MCP in this phase.
+
+The important requirement is that the application services themselves enforce customer ownership so that future MCP tools cannot bypass authorization.
+
+==================================================
+10. TESTS
+==================================================
+
+Add focused tests covering:
+
+Authentication:
+- unauthenticated request receives 401
+
+Customer ownership:
+- customer can retrieve their own accounts
+- customer cannot retrieve another customer's account
+- customer can retrieve their own loan
+- customer cannot retrieve another customer's loan
+- customer can retrieve their own credit card
+- customer cannot retrieve another customer's credit card
+- customer can retrieve transactions for their own account
+- customer cannot retrieve transactions for another customer's account
+
+CustomerId security:
+- CustomerId is obtained from the server-side authenticated session
+- CustomerId supplied by a caller cannot override the authenticated CustomerId
+
+Account:
+- account balance works for owned account
+- recent transactions works for owned account
+- transaction count is bounded
+
+Responses:
+- sensitive identifiers are masked where appropriate
+- EF entities are not exposed directly
+
+==================================================
+11. DO NOT TOUCH
+==================================================
+
+Do not modify:
+- Azure SQL configuration
+- connection strings
+- existing migration
+- database schema unless absolutely required
+- seed data
+- PIN hashing
+- login behavior
+- session token generation
+- cookie configuration
+
+Do not add:
+- Azure OpenAI
+- Azure AI Search
+- RAG
+- Semantic Kernel
+- MCP
+- UI
+
+==================================================
+12. BUILD AND TEST
+==================================================
+
+After implementation:
+
+dotnet build
+
+dotnet test
+
+Fix compilation/test failures caused by your changes.
+
+Do not make unrelated architectural changes.
+
+At the end report:
+
+1. Files created
+2. Files modified
+3. Services/interfaces created
+4. DTOs created
+5. API endpoints created
+6. Ownership enforcement mechanism
+7. How authenticated CustomerId is obtained
+8. Tests added
+9. Build result
+10. Test result
+11. Any database/schema changes
+
+Do not implement Phase 6 or any future functionality.
