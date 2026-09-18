@@ -1,0 +1,115 @@
+We have a critical EF Core migration discovery problem.
+
+Current observed behavior:
+
+1. The file reportedly exists:
+   src/NovaBanking.Infrastructure/Data/Migrations/20260917_InitialCreate.cs
+
+2. The authoritative DbContext reportedly is:
+   src/NovaBanking.Infrastructure/Data/NovaBankingDbContext.cs
+
+3. Running:
+
+   dotnet ef migrations list --project .\src\NovaBanking.Infrastructure --startup-project .\src\NovaBanking.Api
+
+   returns:
+
+   No migrations were found.
+
+4. Running:
+
+   dotnet ef database update --project .\src\NovaBanking.Infrastructure --startup-project .\src\NovaBanking.Api
+
+   returns:
+
+   No migrations were applied. The database is already up to date.
+
+5. The API can connect to Azure SQL, but authentication currently fails with:
+
+   Microsoft.Data.SqlClient.SqlException:
+   Invalid object name 'Customers'.
+
+This means the Azure SQL database does not contain the Customers table and EF CLI is not discovering the migration.
+
+DO NOT create a new migration yet.
+DO NOT delete the Azure database.
+DO NOT modify authentication.
+DO NOT modify entities or the database model.
+DO NOT use EnsureCreated().
+DO NOT use EnsureDeleted().
+DO NOT DropDatabase().
+DO NOT apply destructive operations.
+
+Diagnose the migration discovery issue.
+
+Inspect the actual codebase and check:
+
+1. src/NovaBanking.Infrastructure/NovaBanking.Infrastructure.csproj
+   - Is the migration file actually compiled?
+   - Is there any Compile Remove/None/Content configuration excluding Data/Migrations?
+   - Is Microsoft.EntityFrameworkCore.Design referenced correctly?
+
+2. src/NovaBanking.Infrastructure/Data/NovaBankingDbContext.cs
+   - DbContext class
+   - namespace
+   - constructor
+   - OnConfiguring
+   - any MigrationsAssembly configuration
+   - any assembly configuration that affects migration discovery
+
+3. src/NovaBanking.Infrastructure/Data/Migrations/
+   - exact migration class name
+   - namespace
+   - base class
+   - designer file
+   - ModelSnapshot
+   - whether the migration is associated with the authoritative NovaBankingDbContext
+
+4. Search the entire solution for:
+   - NovaBankingDbContext
+   - InitialCreate
+   - Migration
+   - MigrationsAssembly
+   - AddDbContext
+   - UseSqlServer
+
+5. Check whether there is more than one DbContext still present anywhere.
+
+6. Check whether the migration was accidentally created for a different DbContext or namespace.
+
+7. Check whether the migration files are missing the required .Designer.cs file or ModelSnapshot.
+
+8. Check the project build output to determine whether the migration classes are actually compiled into NovaBanking.Infrastructure.dll.
+
+9. Verify the startup project and target project are pointing to the same authoritative DbContext.
+
+10. Explain the EXACT reason `dotnet ef migrations list` reports "No migrations were found" despite the migration source file existing.
+
+Then make the MINIMAL permanent fix required for EF Core to discover the existing InitialCreate migration.
+
+Important:
+- Reuse the existing InitialCreate migration if it is valid.
+- Do not generate InitialCreate2 or another duplicate migration.
+- Do not alter the database schema model merely to solve discovery.
+- Do not delete any database.
+- Do not change the connection string.
+
+After the fix:
+1. dotnet build
+2. dotnet test
+3. Run:
+
+dotnet ef migrations list --project .\src\NovaBanking.Infrastructure --startup-project .\src\NovaBanking.Api
+
+DO NOT run database update yet.
+
+The final report must state:
+- exact root cause
+- exact files changed
+- why EF previously saw zero migrations
+- confirmation that InitialCreate is now discoverable
+- build result
+- test result
+- exact output of migrations list
+
+Do not proceed to authentication or other phases.
