@@ -1,267 +1,369 @@
-PHASE 7 — IMPLEMENT RAG WITH AZURE AI SEARCH
+PHASE 7B — MAKE RAG ACTUALLY WORK END-TO-END
 
-Implement the RAG layer for NovaBanking according to the case study.
+The previous Phase 7 implementation created the RAG abstractions and tests, but the actual Azure AI Search runtime is still incomplete.
 
-IMPORTANT:
-- Use synthetic banking knowledge only.
-- This RAG layer is for PUBLIC banking policy/FAQ information.
-- Customer-specific information must NOT come from RAG.
-- Do not put CustomerId, account balances, transactions, loans, cards, PINs, credentials, sessions, or other customer-specific data into the knowledge index.
-- Do not weaken the existing authentication/authorization architecture.
-- Do not replace BankingService or MCP with RAG.
-- RAG is only the knowledge retrieval layer.
+Specifically:
+- AzureAiSearchKnowledgeService.SearchAsync() currently throws NotImplementedException.
+- PDF extraction is not implemented.
+- Embedding generation is not implemented.
+- Azure AI Search index creation/schema setup is not implemented.
+- There is no working ingestion CLI.
+- There is no real end-to-end retrieval against Azure AI Search.
 
-CASE STUDY KNOWLEDGE DOCUMENTS
+Implement these now.
 
-The knowledge directory must support these four documents:
+DO NOT create mocks, fake Azure services, local keyword-search substitutes, or placeholder implementations.
 
-1. SavingsAndCurrentAccountTerms.pdf
-2. HomeAndPersonalLoanPolicy.pdf
-3. CreditCardFeesAndBillingGuide.pdf
-4. DigitalBankingAndSecurityFAQ.pdf
+The goal is one real working pipeline:
 
-The required pipeline is:
-
-PDF/document extraction
-        ↓
-cleaning
-        ↓
-chunking + metadata
-        ↓
-embeddings
-        ↓
-Azure AI Search
-        ↓
-top relevant chunks
-        ↓
-grounded prompt
-        ↓
-Azure OpenAI
-
-REQUIRED METADATA
-
-Each indexed chunk must contain:
-
-- DocumentId
-- Title
-- Category
-- Version
-- EffectiveDate
-- PageNumber
-- SourceUrl
-
-Also include the actual searchable chunk content and embedding vector as required by Azure AI Search.
-
-ARCHITECTURE
-
-Create a clean abstraction in the Application layer, for example:
-
-IKnowledgeSearchService
-
-The Application layer must not contain Azure SDK implementation details.
-
-Infrastructure should contain the Azure AI Search implementation.
-
-Suggested structure:
-
-src/NovaBanking.Application/
-    Services/
-        IKnowledgeSearchService.cs
-    DTOs/
-        KnowledgeSearchResultDto.cs
-
-src/NovaBanking.Infrastructure/
-    Search/
-        AzureAiSearchKnowledgeService.cs
-        AzureAiSearchOptions.cs
-        ...
-
-If a better structure already exists, use it consistently rather than duplicating abstractions.
-
-AZURE AI SEARCH
-
-Use the official Azure AI Search SDK.
-
-Configure the service through configuration/options.
-
-DO NOT hardcode:
-- endpoint
-- API keys
-- Azure OpenAI keys
-- connection strings
-
-Use configuration/secrets appropriate for local development.
-
-The application must fail clearly if required configuration is missing.
-
-SEARCH INDEX
-
-Create/document the required Azure AI Search index schema.
-
-It must support:
-- full-text search over chunk content
-- vector search over embeddings
-- metadata filtering
-- returning document/page metadata with results
-
-Use an embedding model available in the Azure environment.
-
-Do not invent a deployment name.
-Make the embedding deployment configurable.
-
-If the Azure resource/model required for embeddings is not available, report the exact missing prerequisite rather than silently substituting an unrelated implementation.
-
-DOCUMENT INGESTION
-
-Create a repeatable ingestion process.
-
-It should:
-
-1. Read the four documents from the knowledge directory.
-2. Extract text while preserving page boundaries where possible.
-3. Clean the extracted text.
-4. Split it into reasonable chunks.
-5. Attach the required metadata.
-6. Generate embeddings.
-7. Upload chunks/documents into Azure AI Search.
-
-The ingestion process must be safe to run repeatedly.
-
-Avoid blindly duplicating chunks on every execution.
-
-Use a deterministic chunk/document identifier.
-
-Keep the ingestion code separate from runtime query handling.
-
-RUNTIME RETRIEVAL
-
-Implement:
-
-SearchBankingKnowledge(question)
-
-using the knowledge search abstraction.
-
-The flow should be:
-
-question
+4 PDFs
   ↓
+PDF page extraction
+  ↓
+cleaning/chunking
+  ↓
+Azure OpenAI embeddings
+  ↓
+Azure AI Search vector/hybrid index
+  ↓
+SearchBankingKnowledge(question)
+  ↓
+real retrieved chunks + metadata
+
+==================================================
+1. NUGET PACKAGES
+==================================================
+
+Use the official Microsoft/Azure SDK packages.
+
+Determine the current compatible stable versions rather than guessing.
+
+Required functionality:
+
+- Azure AI Search / Azure.Search.Documents
+- Azure OpenAI / official Azure OpenAI client capable of generating embeddings
+- PDF text extraction library
+
+For PDF extraction, use a lightweight established .NET PDF library such as PdfPig if compatible.
+
+Run dotnet restore and verify all packages resolve.
+
+Do not create fake Azure SDK classes.
+
+==================================================
+2. AZURE AI SEARCH
+==================================================
+
+Implement AzureAiSearchKnowledgeService.SearchAsync() for real.
+
+Use the official Azure.Search.Documents SDK.
+
+Configuration must come from AzureAiSearchOptions:
+
+- Endpoint
+- ApiKey
+- IndexName
+- EmbeddingDeployment
+
+No secrets in source code.
+
+The search flow must:
+
+1. Receive the user's public banking question.
+2. Generate an embedding for the question using the configured Azure OpenAI embedding deployment.
+3. Query Azure AI Search using vector/hybrid search.
+4. Retrieve the top K relevant chunks.
+5. Map results to KnowledgeSearchResultDto.
+6. Preserve:
+   - DocumentId
+   - Title
+   - Category
+   - Version
+   - EffectiveDate
+   - PageNumber
+   - SourceUrl
+   - Text/content
+   - relevance score if available
+
+Make top-K configurable.
+
+==================================================
+3. AZURE AI SEARCH INDEX
+==================================================
+
+Create an index initialization component.
+
+Suggested index:
+
+nova-banking-knowledge-index
+
+Required fields:
+
+id
+documentId
+title
+category
+version
+effectiveDate
+pageNumber
+sourceUrl
+content
 embedding
+
+Configure:
+
+- id as key
+- content/title as searchable
+- category/version/pageNumber as filterable
+- metadata retrievable
+- embedding as vector field
+- vector dimensions must match the selected embedding model
+- appropriate vector search configuration/profile
+
+Do not hardcode vector dimensions if they depend on the configured model without validating compatibility.
+
+The initialization should be safe to run repeatedly.
+
+If the index doesn't exist:
+    create it.
+
+If it already exists:
+    do not destroy existing indexed data.
+
+Do not silently change an incompatible existing schema.
+
+==================================================
+4. PDF EXTRACTION
+==================================================
+
+Implement actual extraction from:
+
+knowledge/SavingsAndCurrentAccountTerms.pdf
+knowledge/HomeAndPersonalLoanPolicy.pdf
+knowledge/CreditCardFeesAndBillingGuide.pdf
+knowledge/DigitalBankingAndSecurityFAQ.pdf
+
+Preserve page numbers.
+
+The ingestion pipeline should produce:
+
+Document
+  → Page[]
+  → KnowledgeChunk[]
+
+Use the existing KnowledgeIngestionService for cleaning/chunking rather than duplicating its logic.
+
+Each chunk must retain:
+
+DocumentId
+Title
+Category
+Version
+EffectiveDate
+PageNumber
+SourceUrl
+ChunkIndex
+Text
+
+If metadata such as Version/EffectiveDate/SourceUrl isn't present in the PDF itself, use explicit document metadata configuration rather than inventing values.
+
+==================================================
+5. EMBEDDING GENERATION
+==================================================
+
+Implement real embedding generation using Azure OpenAI.
+
+Embedding deployment name must be configurable.
+
+For every chunk:
+
+chunk text
   ↓
-Azure AI Search hybrid/vector retrieval
+Azure OpenAI embedding model
   ↓
-top relevant chunks
+float vector
   ↓
-KnowledgeSearchResultDto
+Azure AI Search embedding field
 
-Return enough information for the AI layer to provide grounded citations/references, including:
+Batch embedding requests where the SDK supports it.
 
-- title
-- category
-- document ID
-- page number
-- relevant text/chunk
-- effective date
-- source URL when available
+Handle transient errors appropriately.
 
-Limit the number of retrieved chunks.
+Do not log:
+- API keys
+- connection strings
+- credentials
+- sensitive customer information
 
-Make the number configurable.
+==================================================
+6. INGESTION CLI
+==================================================
 
-GROUNDING / PROMPT-INJECTION DEFENSE
+Create:
 
-Retrieved documents are DATA, not instructions.
+tools/KnowledgeIngestor
 
-The system must explicitly treat retrieved document content as untrusted reference material.
+This should be a .NET console application.
 
-A retrieved chunk must NEVER be allowed to:
-- override system instructions
-- override authentication
-- override authorization
-- request secrets
-- change tool permissions
-- invoke arbitrary tools
-- change the user's identity
-- instruct the model to ignore security rules
+It must:
 
-Do not blindly concatenate retrieved text into a privileged system prompt.
+1. Load Azure configuration securely.
+2. Initialize/create the Azure AI Search index.
+3. Find the four PDFs in the knowledge directory.
+4. Extract per-page text.
+5. Chunk the documents.
+6. Generate embeddings.
+7. Upsert chunks into Azure AI Search.
+8. Print a useful summary.
 
-Create a clear separation between:
-- system/application instructions
-- user question
-- retrieved knowledge
+Example output:
 
-The final AI layer must be instructed to answer only from retrieved knowledge when the question is a public banking-policy/FAQ question.
+Document: SavingsAndCurrentAccountTerms.pdf
+Pages extracted: X
+Chunks generated: Y
+Chunks uploaded: Y
 
-If retrieval produces no sufficiently relevant results, return a controlled "I don't have enough information in the banking knowledge base" result rather than hallucinating.
+...
 
-CITATIONS
+Total documents: 4
+Total chunks: N
+Index: nova-banking-knowledge-index
 
-RAG results must preserve source attribution.
+Use deterministic chunk IDs already implemented.
 
-The eventual AI response should be able to say something such as:
+Re-running ingestion must upsert rather than duplicate.
 
-"According to Savings and Current Account Terms, page 3..."
+==================================================
+7. CONFIGURATION
+==================================================
 
-Do not fabricate citations.
+Use user secrets or environment variables for local development.
 
-Only cite documents/pages actually returned by retrieval.
+DO NOT ask me to paste credentials into source files.
 
-MCP INTEGRATION
+Expected configuration:
 
-The existing MCP tool:
+AzureAiSearch:
+  Endpoint
+  ApiKey
+  IndexName
+  EmbeddingDeployment
 
-SearchBankingKnowledge(question)
+AzureOpenAI:
+  Endpoint
+  ApiKey
+  EmbeddingDeployment
 
-must call the knowledge search service.
+If the existing project has a better configuration structure, reuse it.
 
-Do not make the MCP tool directly query Azure AI Search.
+Document exactly how I should configure these values.
 
-The architecture should be:
+==================================================
+8. REAL AZURE VERIFICATION
+==================================================
 
-MCP SearchBankingKnowledge
-        ↓
-IKnowledgeSearchService
-        ↓
-AzureAiSearchKnowledgeService
-        ↓
-Azure AI Search
+After implementation, provide exact commands for:
 
-Do NOT modify the customer-specific MCP tools unnecessarily.
+A. Creating/configuring the Azure resources if needed.
 
-They must continue to use:
+B. Setting local configuration.
 
-IBankingService
-    ↓
-ICurrentUserAccessor
-    ↓
-NB_SID
-    ↓
-authenticated CustomerId
-    ↓
-ownership-filtered database query
+C. Running the ingestion CLI.
 
-TESTING
+D. Starting NovaBanking.Api.
 
-Add tests for:
+E. Calling SearchBankingKnowledge through the application/MCP layer.
 
-1. Chunk metadata generation.
-2. Deterministic chunk IDs.
-3. Search result DTO mapping.
-4. No CustomerId/customer data entering the knowledge index.
-5. Empty/no-result retrieval.
-6. Search result metadata preservation.
-7. MCP SearchBankingKnowledge calls IKnowledgeSearchService.
-8. MCP tools cannot accept CustomerId.
-9. Prompt-injection content in a retrieved document is treated as data and cannot alter tool authorization/security behavior.
-10. Missing Azure configuration produces a clear error.
+The verification must prove:
 
-Do NOT require live Azure resources for every unit test.
+Question:
+"What are the fees for a savings account?"
 
-Use mocks/fakes for Azure services where appropriate.
+produces actual chunks retrieved from Azure AI Search.
 
-Also provide a small integration/manual verification path for the actual Azure AI Search resource.
+The result must contain real metadata such as:
 
-BUILD/TEST
+document title
+page number
+chunk content
+
+Do not claim this is verified if Azure credentials/resources are unavailable.
+
+==================================================
+9. ERROR HANDLING
+==================================================
+
+Handle:
+
+- missing Azure configuration
+- Azure AI Search unavailable
+- Azure OpenAI unavailable
+- embedding failure
+- index missing
+- empty search result
+- malformed PDF
+- ingestion failure
+
+Return controlled application errors.
+
+Do not expose Azure credentials or internal connection details.
+
+==================================================
+10. SECURITY
+==================================================
+
+Maintain the existing architecture.
+
+RAG is PUBLIC KNOWLEDGE ONLY.
+
+Absolutely no:
+- CustomerId
+- account numbers
+- balances
+- transactions
+- loans
+- credit cards
+- PINs
+- sessions
+- credentials
+
+may enter the knowledge index.
+
+SearchBankingKnowledge must remain separate from authenticated customer-specific MCP tools.
+
+Retrieved document content is untrusted DATA, not instructions.
+
+Do not allow retrieved text to override:
+- system instructions
+- authorization
+- tool permissions
+- authentication
+- application security rules
+
+==================================================
+11. TESTS
+==================================================
+
+Keep existing tests passing.
+
+Add unit tests for:
+
+- PDF page extraction
+- chunk generation from extracted pages
+- embedding-to-index document mapping
+- deterministic IDs
+- metadata preservation
+- no customer data in ingestion models
+- empty retrieval
+- Azure search result mapping
+
+Use mocks for unit tests.
+
+Do not require live Azure resources for every test.
+
+==================================================
+12. BUILD
+==================================================
 
 Run:
 
@@ -269,33 +371,42 @@ dotnet restore
 dotnet build
 dotnet test
 
-Do not proceed by creating fake Azure AI Search endpoints or fake Azure SDK classes.
+Also build the KnowledgeIngestor project explicitly.
 
-FINAL REPORT
+==================================================
+13. FINAL REPORT
+==================================================
 
 Report:
 
-1. Files/classes created or modified.
-2. NuGet packages added and versions.
-3. Azure AI Search index name.
-4. Index fields/schema.
-5. Embedding model/deployment configuration name.
-6. How PDF text extraction works.
-7. Chunking strategy.
-8. Required metadata.
-9. How deterministic IDs prevent duplicate ingestion.
-10. Runtime retrieval flow.
-11. How SearchBankingKnowledge uses the RAG service.
-12. How prompt injection is handled.
-13. How citations are represented.
-14. Required Azure resources/configuration that I must create or configure manually.
-15. Exact commands to ingest the four PDFs.
+1. NuGet packages and versions.
+2. Files created/modified.
+3. Azure AI Search index schema.
+4. Vector dimensions.
+5. Embedding model/deployment.
+6. PDF extraction library.
+7. Chunking configuration.
+8. Ingestion CLI command.
+9. Configuration required.
+10. SearchAsync implementation details.
+11. Exact runtime retrieval flow.
+12. Number of PDFs successfully processed.
+13. Number of chunks generated.
+14. Whether actual Azure indexing succeeded.
+15. Whether an actual query successfully retrieved a real chunk.
 16. Build result.
 17. Test result.
 
 CRITICAL:
-Do not claim RAG is working against Azure until an actual Azure AI Search index has been created and a real document has been successfully indexed and retrieved.
 
-If Azure configuration/resource creation is required and cannot be performed from the codebase, clearly separate:
-- code implementation completed
-- Azure portal/resource setup still required
+If you cannot access the configured Azure resources from this environment, still implement the complete code.
+
+Then clearly state:
+
+CODE COMPLETE:
+- ...
+
+AZURE VERIFICATION BLOCKED BY:
+- ...
+
+Do NOT replace missing Azure connectivity with a fake implementation just to make the tests pass.
