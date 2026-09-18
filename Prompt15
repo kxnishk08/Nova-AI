@@ -1,0 +1,259 @@
+PHASE 6 — MCP BANKING TOOLS
+
+The following are already implemented and working:
+
+- Azure SQL database
+- EF Core model and migration
+- Synthetic banking data
+- PIN authentication
+- Server-side CustomerSession
+- Authenticated CustomerId resolution
+- Read-only BankingService
+- Protected banking REST APIs
+- Ownership enforcement
+
+Do NOT redo any of these.
+
+Implement the MCP layer for the Nova AI Banking Assistant.
+
+==================================================
+ARCHITECTURE
+==================================================
+
+The existing project:
+
+src/NovaBanking.McpServer
+
+must expose the banking operations as MCP tools.
+
+The MCP layer must NOT directly query the database.
+
+MCP tools must call the existing protected application/service layer.
+
+The architecture must remain:
+
+MCP Tool
+   ↓
+IBankingService
+   ↓
+ownership enforcement
+   ↓
+authenticated CustomerId
+   ↓
+EF Core
+   ↓
+Azure SQL
+
+The LLM must never receive unrestricted database access.
+
+==================================================
+TOOLS
+==================================================
+
+Implement these MCP tools:
+
+1. GetCustomerProfile()
+
+2. GetAccountSummary()
+
+3. GetAccountBalance(accountId)
+
+4. GetRecentTransactions(accountId, count)
+
+5. GetLoanSummary(loanId)
+
+6. GetCreditCardSummary(cardId)
+
+Each tool must return structured, safe data.
+
+Do NOT expose:
+- PINs
+- PIN hashes
+- session tokens
+- passwords
+- SQL connection strings
+- full card numbers
+- unnecessary sensitive identifiers
+
+==================================================
+AUTHENTICATION / CUSTOMER OWNERSHIP
+==================================================
+
+CRITICAL:
+
+MCP must NOT accept an arbitrary CustomerId parameter for customer-specific operations.
+
+Do NOT implement:
+
+GetAccountSummary(customerId)
+
+GetCustomerProfile(customerId)
+
+or any equivalent pattern where the LLM chooses CustomerId.
+
+The authenticated server-side session remains the authority.
+
+The MCP layer must use the existing authenticated customer context/application service.
+
+If the current MCP server runs as a separate process and therefore cannot directly access the ASP.NET Core request/session context, do NOT invent a security bypass.
+
+Instead, inspect the current architecture and implement the safest integration pattern that preserves the rule:
+
+CustomerId comes from authenticated server-side context, NOT from LLM input.
+
+If a transport/context bridge is required, document it clearly and keep it server-controlled.
+
+==================================================
+TOOL PARAMETERS
+==================================================
+
+GetCustomerProfile:
+- no parameters
+
+GetAccountSummary:
+- no parameters
+
+GetAccountBalance:
+- accountId only
+
+GetRecentTransactions:
+- accountId
+- count
+
+GetLoanSummary:
+- loanId only
+
+GetCreditCardSummary:
+- cardId only
+
+The identifiers are resource selectors, NOT authorization identities.
+
+The underlying BankingService must continue enforcing:
+
+resource.CustomerId == authenticatedCustomerId
+
+==================================================
+MCP TOOL DESCRIPTIONS
+==================================================
+
+Give every tool a clear description explaining:
+- what it does
+- that it is read-only
+- what parameters it accepts
+- that customer ownership is enforced server-side
+
+Do not allow tools for:
+- transfers
+- payments
+- card blocking
+- PIN changes
+- credit decisions
+- account mutations
+- loan mutations
+- credit-card mutations
+
+==================================================
+MCP SERVER CONFIGURATION
+==================================================
+
+Inspect the existing NovaBanking.McpServer project and implement MCP using the appropriate current MCP .NET package/version already selected by the solution.
+
+Do not randomly introduce unrelated MCP frameworks.
+
+Keep the MCP server focused on the case-study tool allowlist.
+
+If the MCP project currently lacks the required packages, add only the necessary packages.
+
+Do not add Azure OpenAI, Semantic Kernel, RAG, or Azure AI Search yet.
+
+==================================================
+ERROR HANDLING
+==================================================
+
+MCP tools must return safe errors.
+
+Do not expose:
+- SQL exceptions
+- stack traces
+- connection strings
+- credentials
+- internal authentication details
+
+A resource that does not belong to the authenticated customer must not leak whether that resource exists.
+
+==================================================
+TESTING
+==================================================
+
+Add focused MCP tests covering:
+
+- GetCustomerProfile works for an authenticated customer
+- GetAccountSummary works for an authenticated customer
+- GetAccountBalance works for an owned account
+- GetRecentTransactions works for an owned account
+- GetLoanSummary works for an owned loan
+- GetCreditCardSummary works for an owned card
+- unauthenticated requests are rejected
+- another customer's account cannot be accessed
+- another customer's loan cannot be accessed
+- another customer's credit card cannot be accessed
+- CustomerId cannot be supplied by the LLM to override authentication
+
+Keep tests deterministic.
+
+==================================================
+IMPORTANT DESIGN CHECK
+==================================================
+
+Before implementing, inspect how NovaBanking.McpServer currently obtains request/session context.
+
+If it cannot safely obtain the authenticated CustomerId because it is a separate process from NovaBanking.Api, STOP and explain the exact integration problem and propose the minimal secure architecture.
+
+Do NOT solve the problem by:
+- trusting CustomerId from the MCP request
+- trusting CustomerId from the LLM
+- adding a hardcoded CustomerId
+- bypassing BankingService
+- directly querying EF Core from MCP
+
+==================================================
+DO NOT IMPLEMENT
+==================================================
+
+Do not implement:
+- Semantic Kernel
+- Azure OpenAI
+- Azure AI Search
+- RAG
+- chat
+- UI
+- transfers
+- payments
+- card blocking
+- PIN changes
+- credit decisions
+
+==================================================
+BUILD / TEST
+==================================================
+
+Run:
+
+dotnet build
+
+dotnet test
+
+Report:
+
+1. MCP packages added
+2. MCP tools created
+3. Files created/modified
+4. How MCP obtains authenticated CustomerId
+5. How ownership is enforced
+6. How the MCP server is hosted
+7. Tests added
+8. Build result
+9. Test result
+10. Any architectural limitation encountered
+
+Do not implement the next phase.
