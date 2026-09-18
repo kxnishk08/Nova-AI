@@ -1,28 +1,98 @@
-PHASE 6B — VERIFY AND IMPLEMENT ACTUAL MCP PROTOCOL
+PHASE 6C — REPLACE CUSTOM MCP PROTOCOL WITH OFFICIAL MCP C# SDK
 
-We have completed the banking service layer and currently have endpoints under:
+The current NovaBanking.McpServer implementation is NOT using the official MCP SDK.
 
-/mcp/Tools/...
+It currently implements custom endpoints:
 
-However, before proceeding to RAG/Azure AI Search, verify whether NovaBanking.McpServer is actually implementing the Model Context Protocol (MCP), or whether it is only exposing ordinary ASP.NET Core REST controller endpoints.
+GET  /mcp/discover
+POST /mcp/invoke
 
-IMPORTANT:
-Do not assume that an ASP.NET controller called "McpToolsController" is an MCP implementation.
+This is a custom HTTP tool protocol, not the actual Model Context Protocol.
 
-Inspect the current codebase and determine whether the project:
-- implements an actual MCP server
-- exposes MCP tools through an MCP-compatible transport/protocol
-- uses an appropriate .NET MCP SDK/package
-- exposes tool metadata/schema in the MCP format
-- supports MCP tool discovery/invocation
+We need to replace the custom protocol with the official Microsoft-collaborated MCP C# SDK.
 
-If the current implementation is only REST endpoints, convert the MCP server to a genuine MCP implementation while preserving the existing secure architecture.
+Use the official package:
+
+ModelContextProtocol.AspNetCore
+
+This is an ASP.NET Core HTTP MCP server and the official SDK supports HTTP-based MCP servers.
+
+Reference:
+https://github.com/modelcontextprotocol/csharp-sdk
 
 ==================================================
-REQUIRED MCP TOOLS
+CRITICAL CONSTRAINTS
 ==================================================
 
-Expose these actual MCP tools:
+DO NOT change the existing banking domain/service architecture.
+
+Keep:
+
+MCP tool
+    ↓
+IBankingService
+    ↓
+ICurrentUserAccessor
+    ↓
+NB_SID server-side session
+    ↓
+CustomerId
+    ↓
+ownership check
+    ↓
+Azure SQL
+
+The MCP tools must NEVER accept CustomerId as an authorization parameter.
+
+Do NOT query EF Core directly from MCP tools.
+
+Do NOT bypass BankingService.
+
+Do NOT trust CustomerId supplied by an LLM/client.
+
+Do NOT hardcode CustomerId.
+
+==================================================
+1. INSTALL OFFICIAL MCP SDK
+==================================================
+
+Add the appropriate official NuGet package:
+
+ModelContextProtocol.AspNetCore
+
+Use the current stable version compatible with the project's target framework.
+
+Do NOT install unofficial MCP packages.
+
+Do NOT implement the MCP wire protocol manually.
+
+Do NOT create another custom /mcp/discover or /mcp/invoke protocol.
+
+==================================================
+2. IMPLEMENT REAL MCP SERVER
+==================================================
+
+Configure NovaBanking.McpServer using the official MCP ASP.NET Core integration.
+
+Use:
+
+AddMcpServer()
+
+and the appropriate HTTP transport configuration for the current SDK version.
+
+Use the SDK's actual MCP transport endpoint.
+
+Do not create a custom JSON transport.
+
+The server must support genuine MCP client discovery and tool invocation.
+
+==================================================
+3. MCP TOOLS
+==================================================
+
+Create actual MCP server tools using the official SDK's tool registration mechanism.
+
+Expose exactly:
 
 GetCustomerProfile()
 GetAccountSummary()
@@ -31,172 +101,111 @@ GetRecentTransactions(accountId, count)
 GetLoanSummary(loanId)
 GetCreditCardSummary(cardId)
 
-Do NOT add:
-- transfers
-- payments
-- card blocking
-- PIN changes
-- credit decisions
-- account mutations
-- loan mutations
-- credit-card mutations
+Use the SDK's McpServerTool / McpServerToolType mechanism or the current equivalent for the installed SDK version.
+
+Each tool must have:
+- proper MCP tool name
+- description
+- parameter schema
+- structured output
+- read-only behavior
+
+Use Description attributes where appropriate so the SDK generates correct tool metadata/schema.
 
 ==================================================
-SECURITY
+4. BANKING SERVICE
 ==================================================
 
-CRITICAL:
+Each MCP tool must call IBankingService.
 
-The LLM/MCP caller must NEVER supply CustomerId as an authorization identity.
+Example conceptual flow:
 
-CustomerId must continue to come from authenticated server-side context.
-
-The MCP tool must call the existing IBankingService.
-
-The architecture must remain:
-
-MCP Tool
-    ↓
-IBankingService
-    ↓
+[MCP GetAccountBalance]
+        ↓
+IBankingService.GetAccountBalanceAsync(accountId)
+        ↓
 ICurrentUserAccessor
-    ↓
-authenticated server-side session
-    ↓
-CustomerId
-    ↓
+        ↓
+authenticated CustomerId
+        ↓
 ownership predicate
-    ↓
+        ↓
 Azure SQL
 
-Do NOT:
-- query EF Core directly from MCP
-- accept CustomerId as a tool parameter
-- trust CustomerId from the LLM
-- hardcode CustomerId
-- bypass BankingService
-- bypass ownership checks
-- replace server-side sessions with JWTs
-- weaken authentication
+Do not duplicate banking logic in the MCP layer.
 
 ==================================================
-AUTHENTICATED CONTEXT
+5. AUTHENTICATION
 ==================================================
 
-The existing architecture uses NB_SID.
+Preserve the existing NB_SID server-side session architecture.
 
-Inspect how the MCP server receives authenticated context.
+The MCP request must be associated with an authenticated customer context.
 
-If the MCP server receives the NB_SID cookie directly, validate it server-side exactly as the existing CurrentUserAccessor does.
+The MCP layer must not accept:
 
-If actual MCP transport does not naturally support the existing cookie/session mechanism, DO NOT create a security bypass.
+customerId
 
-Instead implement the minimal server-side authenticated bridge/context necessary to preserve:
+as a tool parameter.
 
-"CustomerId is derived from authenticated server-side state."
+The resource IDs such as accountId, loanId and cardId are only selectors.
 
-Document the exact mechanism.
+BankingService remains responsible for checking ownership.
 
-Never allow the MCP client or LLM to choose the customer identity.
+If the official MCP HTTP transport has a request/HttpContext integration mechanism, use it to access the existing authenticated context.
 
-==================================================
-MCP TOOL DEFINITIONS
-==================================================
+If the MCP SDK's transport changes how HttpContext is exposed, implement the minimal secure adapter needed for ICurrentUserAccessor.
 
-Each tool needs:
-- tool name
-- clear description
-- parameter schema where applicable
-- read-only behavior
-- safe structured output
-
-Tool parameters:
-
-GetCustomerProfile:
-No parameters.
-
-GetAccountSummary:
-No parameters.
-
-GetAccountBalance:
-accountId
-
-GetRecentTransactions:
-accountId
-count
-
-GetLoanSummary:
-loanId
-
-GetCreditCardSummary:
-cardId
-
-Resource IDs are only resource selectors.
-
-They are NOT authorization credentials.
+Do NOT weaken authentication to make MCP work.
 
 ==================================================
-REST CONTROLLERS
+6. REMOVE CUSTOM PROTOCOL
 ==================================================
 
-Determine whether the existing:
+Remove or disable the custom:
 
-src/NovaBanking.McpServer/Controllers/McpToolsController.cs
+McpProtocolController
+/mcp/discover
+/mcp/invoke
 
-is still needed.
+implementation.
 
-If actual MCP replaces those endpoints, do not maintain two independent implementations of the same business operations unless there is a clear reason.
+Do not leave two competing MCP implementations.
 
-Avoid duplicated authorization/business logic.
+The final NovaBanking.McpServer should have ONE real MCP implementation.
 
-The BankingService remains the single source of banking business logic.
+The old McpToolsController may also be removed if it is only duplicate REST tooling and is no longer needed.
 
-==================================================
-PACKAGE / SDK
-==================================================
-
-Inspect the current project and use the appropriate current .NET MCP SDK/package.
-
-Do not blindly install random packages.
-
-Use the official/appropriate MCP .NET implementation compatible with this project and target framework.
-
-Keep the MCP implementation minimal and suitable for the case-study prototype.
+Do not remove BankingService or any application-layer functionality.
 
 ==================================================
-TESTING
+7. TESTING
 ==================================================
 
-Update/add tests to verify:
+Update tests to test the actual MCP implementation rather than testing the custom controller.
 
-1. MCP server starts successfully.
+Tests must verify:
 
-2. MCP tool discovery exposes:
-   GetCustomerProfile
-   GetAccountSummary
-   GetAccountBalance
-   GetRecentTransactions
-   GetLoanSummary
-   GetCreditCardSummary
+- MCP server starts
+- MCP client can connect using the supported HTTP transport
+- MCP tool discovery returns all six tools
+- GetCustomerProfile works
+- GetAccountSummary works
+- GetAccountBalance works
+- GetRecentTransactions works
+- GetLoanSummary works
+- GetCreditCardSummary works
+- unauthenticated requests are rejected
+- another customer's resources cannot be accessed
+- CustomerId cannot be supplied to override authenticated identity
+- sensitive data is not exposed
 
-3. Tool invocation calls the BankingService.
+Use the official SDK's testing/client facilities where practical.
 
-4. An authenticated customer can access their own data.
-
-5. A customer cannot access another customer's resources.
-
-6. CustomerId cannot be supplied by the MCP caller to override authenticated identity.
-
-7. Unauthenticated invocation is rejected.
-
-8. Sensitive data is not returned.
-
-9. Read-only restrictions are preserved.
-
-10. Tool schemas correctly expose only the intended parameters.
+Do not merely unit-test a custom controller.
 
 ==================================================
-BUILD
+8. BUILD / TEST
 ==================================================
 
 Run:
@@ -205,30 +214,29 @@ dotnet build
 
 dotnet test
 
-Do not implement:
-- Azure OpenAI
-- Semantic Kernel
-- Azure AI Search
-- RAG
-- chat UI
+Fix all compilation and test failures.
 
 ==================================================
-FINAL REPORT
+9. FINAL REPORT
 ==================================================
 
-Clearly report:
+Report:
 
-1. Was the previous implementation actual MCP or ordinary REST?
-2. What MCP SDK/package is being used?
-3. What MCP transport is being used?
-4. How MCP tool discovery works.
-5. How MCP tool invocation works.
-6. How authenticated CustomerId reaches the BankingService.
-7. How ownership is enforced.
-8. Whether McpToolsController remains necessary.
-9. Files created/modified.
-10. Tests added.
-11. Build result.
-12. Test result.
+1. Exact ModelContextProtocol package/version installed
+2. Exact MCP HTTP transport used
+3. Exact MCP endpoint exposed by the SDK
+4. How the six tools are registered
+5. How tool discovery works
+6. How tool invocation works
+7. How NB_SID reaches ICurrentUserAccessor
+8. How ownership is enforced
+9. Which custom MCP files/endpoints were removed
+10. Tests added/updated
+11. Build result
+12. Test result
 
-Do not proceed to Phase 7.
+IMPORTANT:
+
+Do not proceed to RAG, Azure AI Search, Azure OpenAI, or Semantic Kernel.
+
+Stop after genuine MCP implementation and verification.
