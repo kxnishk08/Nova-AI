@@ -1,96 +1,50 @@
-Proceed with diagnosing and fixing the current KnowledgeIngestor embedding failure.
+Now verify the RAG retrieval path end-to-end.
 
-Current status:
-- PdfPig dependency mismatch: FIXED
-- PDF extraction: WORKING
-- Chunking: WORKING
-- Azure OpenAI embedding configuration was previously fixed
-- Azure AI Search index API version: 2024-07-01
-- Azure AI Search vector schema: WORKING
-- Solution build: PASSED
-- Tests: 26 PASSED
+Do NOT change the existing architecture or ingestion pipeline.
 
-KnowledgeIngestor now reports:
+We have confirmed:
+- Azure AI Search index: nova-banking-knowledge-index
+- 4 documents
+- 12 chunks uploaded
+- embeddings generated successfully
+- 26 tests passing
 
-Pages extracted: 3
-Chunks generated: 3
-
-Then:
-
-System.InvalidOperationException:
-Embedding request failed: NotFound
-
-at tools/KnowledgeIngestor/Program.cs line 70
-
-Important context:
-There is already a shared implementation:
-
-src/NovaBanking.Infrastructure/Search/OpenAiRestEmbeddings.cs
-
-It uses the Azure OpenAI-compatible v1 embeddings endpoint:
-
-POST {endpoint}/openai/v1/embeddings
-
-with:
-
-{
-  "input": [...],
-  "model": "text-embedding-3-small"
-}
-
-The KnowledgeIngestor previously had a separate local embedding implementation.
+I want a minimal read-only verification of the existing RAG search implementation.
 
 Tasks:
 
-1. Inspect the CURRENT tools/KnowledgeIngestor/Program.cs embedding implementation.
-2. Determine the exact URL it is calling, without printing API keys/secrets.
-3. Determine the effective OpenAiEndpoint and EmbeddingDeployment configuration source/value (endpoint and deployment only; never print the key).
-4. Compare its implementation with:
-   src/NovaBanking.Infrastructure/Search/OpenAiRestEmbeddings.cs
+1. Inspect the existing AzureAiSearchKnowledgeService implementation.
 
-5. If KnowledgeIngestor is still using its own outdated embedding implementation, replace that local implementation with the existing shared OpenAiRestEmbeddings.GetEmbeddingsAsync helper.
+2. Verify that vector search:
+   - generates an embedding for the user's question using the same text-embedding-3-small deployment
+   - queries nova-banking-knowledge-index
+   - uses the correct vector field
+   - uses the correct vectorSearchProfile
+   - returns the top relevant chunks
+   - preserves document metadata such as DocumentId, Title, Category, Version, EffectiveDate, PageNumber, SourceUrl
 
-6. The KnowledgeIngestor should use:
-   endpoint:
-   https://kanishksharma-7060-resource.services.ai.azure.com
+3. Run a simple test query against the existing index, for example:
 
-   deployment/model:
-   text-embedding-3-small
+   "What are the rules for savings account minimum balance?"
 
-   endpoint:
-   {endpoint}/openai/v1/embeddings
+4. Report:
+   - whether the query embedding succeeds
+   - whether Azure AI Search returns results
+   - number of results
+   - titles/categories of returned documents
+   - page numbers
+   - short sanitized excerpts sufficient to prove relevance
 
-7. Preserve the existing shared UserSecrets configuration. Do not hardcode secrets.
+5. Do NOT print API keys, connection strings, customer data, session IDs, or other secrets.
 
-8. Do NOT change:
-   - Azure resources
-   - deployment
-   - API keys
-   - Azure AI Search
-   - vector schema
-   - PdfPig dependencies
-   - PDF extraction/chunking
-   - MCP
-   - authentication
-   - database
-   - unrelated code
+6. If the current search implementation is incompatible with the 2024-07-01 Search API, make only the minimum required correction.
 
-9. After the minimal fix run:
+7. Run:
    dotnet build
    dotnet test
-   dotnet build tools/KnowledgeIngestor
-   dotnet run --project tools\KnowledgeIngestor
 
-10. If the embedding request still returns NotFound:
-   STOP.
-   Report:
-   - exact URL
-   - deployment/model name
-   - HTTP status
-   - sanitized response body
-   - effective endpoint source
-   - effective deployment source
+8. Do NOT modify authentication, MCP, SQL, banking services, ingestion, PDF extraction, or unrelated code.
 
-   Do not make another speculative Azure/code change.
+If retrieval succeeds, stop and report the evidence.
 
-Do not print or expose any API key.
+If retrieval fails, stop at the first error and report the exact HTTP status, sanitized response body, URL/API operation, and relevant code location. Do not make speculative changes.
