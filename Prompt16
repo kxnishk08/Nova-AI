@@ -1,20 +1,75 @@
-dotnet user-secrets set "AzureAiSearch:EmbeddingDeployment" "text-embedding-3-small" --project .\src\NovaBanking.Api
+We have a runtime configuration bug in the AI/RAG flow. Do NOT redesign the architecture or change Azure resources.
 
-dotnet user-secrets set "AzureAiSearch:OpenAiEndpoint" "https://kanishksharma-7060-resource.services.ai.azure.com" --project .\src\NovaBanking.Api
+Current `dotnet user-secrets list --project .\src\NovaBanking.Api` confirms these values exist:
 
+AzureOpenAI:ChatDeployment = gpt-4o
 
+AzureAiSearch:OpenAiEndpoint = https://kanishksharma-7060-resource.services.ai.azure.com
+AzureAiSearch:OpenAiApiKey = [configured secret]
+AzureAiSearch:EmbeddingDeployment = text-embedding-3-small
+AzureAiSearch:Endpoint = https://novasearch28.search.windows.net
+AzureAiSearch:IndexName = nova-banking-knowledge-index
+AzureAiSearch:ApiKey = [configured secret]
 
-dotnet user-secrets set "AzureAiSearch:OpenAiApiKey" "YOUR_ACTUAL_EMBEDDING_RESOURCE_KEY" --project .\src\NovaBanking.Api
+But POST /api/ai/ask fails with:
 
-dotnet run --project .\src\NovaBanking.Api
+System.InvalidOperationException:
+OpenAI endpoint and API key must be configured in AzureAiSearchOptions.OpenAiEndpoint/OpenAiApiKey
 
-$body = @{
-    message = "What is the minimum balance for a savings account?"
-} | ConvertTo-Json
+at:
+NovaBanking.Infrastructure.Search.AzureAiSearchKnowledgeService.CreateEmbeddingAsync(...)
+line 123
 
-Invoke-RestMethod `
-    -Uri "http://localhost:5146/api/ai/ask" `
-    -Method Post `
-    -ContentType "application/json" `
-    -Body $body
+The important fact is that the User Secrets contain the values, but AzureAiSearchKnowledgeService sees OpenAiEndpoint/OpenAiApiKey as null or empty.
 
+Please inspect the actual code and diagnose the configuration binding path.
+
+Specifically inspect:
+
+1. AzureAiSearchOptions.cs
+2. ServiceCollectionExtensions.cs
+3. Program.cs
+4. AzureAiSearchKnowledgeService constructor and CreateEmbeddingAsync()
+5. Any registration of AzureAiSearchOptions, IOptions<AzureAiSearchOptions>, or AzureAiSearchKnowledgeService
+6. Configuration provider ordering, especially AddUserSecrets
+7. Whether Infrastructure is receiving the same IConfiguration instance from the API
+8. Whether AzureAiSearchOptions is manually constructed anywhere instead of being bound from IConfiguration
+9. Whether property names exactly match:
+   OpenAiEndpoint
+   OpenAiApiKey
+   EmbeddingDeployment
+   Endpoint
+   ApiKey
+   IndexName
+10. Whether the service is accidentally binding from a different section such as AzureOpenAI instead of AzureAiSearch.
+
+Do NOT print or log the actual API key or SQL password.
+
+Add a temporary safe diagnostic if necessary that reports only whether each configuration value is null/empty and the non-secret endpoint/deployment names. Do not expose secret values.
+
+The expected binding is conceptually:
+
+configuration section:
+"AzureAiSearch"
+
+to:
+
+AzureAiSearchOptions
+
+with:
+
+OpenAiEndpoint <- AzureAiSearch:OpenAiEndpoint
+OpenAiApiKey <- AzureAiSearch:OpenAiApiKey
+EmbeddingDeployment <- AzureAiSearch:EmbeddingDeployment
+Endpoint <- AzureAiSearch:Endpoint
+ApiKey <- AzureAiSearch:ApiKey
+IndexName <- AzureAiSearch:IndexName
+
+Fix the root cause rather than hardcoding any values.
+
+Then:
+- build the solution
+- run the existing tests
+- report exactly what caused the values to be empty
+- report the files changed
+- do not modify authentication, MCP, RAG search logic, database, or Azure resources.
