@@ -1,72 +1,130 @@
-The KnowledgeIngestor builds successfully now, but when I run:
+The UserSecrets configuration issue is fixed.
 
-dotnet run --project tools\KnowledgeIngestor
+KnowledgeIngestor now successfully loads the shared secrets, reaches Azure OpenAI, and receives:
 
-it reports:
+HTTP 404
+{"error":{"code":"404","message":"Resource not found"}}
 
-"AzureAiSearch and AzureOpenAI configuration missing."
+The current implementation uses the older Azure OpenAI embeddings route:
 
-The reason is that I configured the Azure secrets using User Secrets for NovaBanking.Api, but KnowledgeIngestor is a separate project and its ConfigurationBuilder currently isn't loading that same User Secrets store.
+/openai/deployments/{deployment}/embeddings?api-version=2023-10-01
 
-Fix this properly.
+Update the embedding implementation to the current Azure OpenAI OpenAI-compatible v1 embeddings API.
 
-REQUIREMENTS:
+IMPORTANT:
+- Do not change the Azure resource.
+- Do not create another deployment.
+- Do not change the deployment name.
+- Do not change the User Secrets.
+- Do not add Azure.AI.OpenAI.
+- Do not modify MCP/authentication/database code.
 
-1. Inspect:
-   src/NovaBanking.Api/NovaBanking.Api.csproj
-   tools/KnowledgeIngestor/KnowledgeIngestor.csproj
-   tools/KnowledgeIngestor/Program.cs
+CURRENT AZURE CONFIGURATION
 
-2. Find the existing UserSecretsId used by NovaBanking.Api.
+Azure OpenAI resource:
+novaai2026
 
-3. Configure KnowledgeIngestor to use the SAME UserSecretsId so it can access the exact same local User Secrets store.
+Azure OpenAI endpoint:
+https://novaai2026.openai.azure.com/
 
-Do not create a second copy of the secrets.
+Embedding deployment:
+text-embedding-3-small
 
-4. Add the necessary Microsoft.Extensions.Configuration.UserSecrets package to KnowledgeIngestor if required.
+The deployment is confirmed as Succeeded in Microsoft Foundry.
 
-5. Update KnowledgeIngestor's ConfigurationBuilder so it loads:
-   - appsettings.json
-   - environment variables
-   - the existing shared User Secrets store
+TASK
 
-The configuration hierarchy must continue supporting:
+1. Update the REST embedding implementation in:
 
-AzureAiSearch:Endpoint
-AzureAiSearch:ApiKey
-AzureAiSearch:IndexName
-AzureAiSearch:EmbeddingDeployment
+src/NovaBanking.Infrastructure/Search/AzureAiSearchKnowledgeService.cs
+
+and
+
+tools/KnowledgeIngestor/Program.cs
+
+to use:
+
+POST {endpoint}/openai/v1/embeddings
+
+2. Use the OpenAI-compatible request format:
+
+{
+  "input": ["text 1", "text 2"]
+  "model": "text-embedding-3-small"
+}
+
+Use the configured deployment name for the model value. Do not hardcode it.
+
+3. Authenticate using:
+
+api-key: <configured Azure OpenAI API key>
+
+4. Parse:
+
+data[].embedding
+
+into the existing float[] representation.
+
+5. Do not use:
+
+/openai/deployments/{deployment}/embeddings?api-version=2023-10-01
+
+anymore.
+
+6. Keep the existing configuration keys:
+
 AzureAiSearch:OpenAiEndpoint
 AzureAiSearch:OpenAiApiKey
+AzureAiSearch:EmbeddingDeployment
 
-6. Do NOT print any secret values to the console.
+7. Make sure endpoint normalization doesn't produce a malformed URL if the configured endpoint ends with '/'.
 
-7. Do NOT change the Azure endpoints, deployment name, index name, or existing secrets.
+8. Use the same embedding implementation for:
+   - index dimension detection
+   - document/chunk embeddings during ingestion
+   - runtime query embeddings
 
-8. Do NOT add Azure.AI.OpenAI.
+Avoid having three different embedding implementations.
 
-9. Do NOT modify the RAG architecture or MCP implementation.
+9. Do not change Azure AI Search code yet.
 
 10. Run:
 
 dotnet restore
-dotnet build tools/KnowledgeIngestor
+dotnet build
 dotnet test
+dotnet build tools/KnowledgeIngestor
 
 11. Then run:
 
 dotnet run --project tools/KnowledgeIngestor
 
-If configuration is now loaded, it should proceed to the PDF/Azure ingestion stage.
+EXPECTED RESULT
 
-Do NOT ask me to paste the Azure keys into source code or appsettings.json.
+The program should get past:
 
-Report:
-- UserSecretsId used by the API
-- how KnowledgeIngestor now loads the shared secrets
-- package added, if any
-- build result
-- test result
-- result of running KnowledgeIngestor
+"Unable to obtain embedding dimension"
 
-Do not expose any secret values in the report.
+and proceed to:
+- index initialization
+- PDF extraction
+- chunking
+- embedding generation
+- Azure AI Search upsert
+
+If the new v1 embeddings request still returns 404, STOP.
+
+Do not make additional speculative code changes.
+
+Instead report:
+- exact HTTP URL used, WITHOUT the API key
+- deployment/model name used
+- HTTP status
+- response body
+- whether the request reached novaai2026
+
+Do not print any API keys or secret values.
+
+Also report whether the Azure OpenAI v1 endpoint is supported by the resource.
+
+The goal is to determine whether the problem is the old API route or whether the deployment is associated with a different Foundry/Azure resource.
