@@ -1,74 +1,74 @@
-We have fixed the Azure OpenAI embedding configuration.
+The current failure is confirmed as an Azure AI Search API-version mismatch.
 
-The embedding request now succeeds, and the KnowledgeIngestor has progressed to Azure AI Search index creation.
+Current error:
 
-The ONLY current failure is:
+The property 'vectorSearchProfile' does not exist on type
+Microsoft.Azure.Search.V2023_07_01_Preview.SchemaField
+or is not present in API version '2023-07-01-Preview'.
 
-Index creation failed:
-BadRequest -
-Cannot find nested property 'parameters' on the resource type
-'Microsoft.Azure.Search.V2023_07_01_Preview.VectorSearchAlgorithmConfiguration'
+We should NOT remove vectorSearchProfile. The modern vector index schema requires it.
 
-Fix ONLY the Azure AI Search index schema in:
+Microsoft's current Azure AI Search REST API supports vector profiles and vectorSearchProfile in newer stable API versions such as 2024-07-01.
 
-src/NovaBanking.Infrastructure/Search/AzureAiSearchIndexInitializer.cs
+Make the MINIMAL change needed:
 
-The current vectorSearch algorithm configuration is using:
+1. In:
+   src/NovaBanking.Infrastructure/Search/AzureAiSearchIndexInitializer.cs
 
-"parameters": {
-    "m": 4,
-    "efConstruction": 400,
-    "efSearch": 500,
-    "metric": "cosine"
-}
+   Find the Azure AI Search index REST API URL currently using:
+   api-version=2023-07-01-Preview
 
-Change it to the Azure AI Search REST schema:
+   Change ONLY the index-management API version to:
+   api-version=2024-07-01
 
-"vectorSearch": {
-  "algorithms": [
-    {
-      "name": "vectorConfig",
-      "kind": "hnsw",
-      "hnswParameters": {
-        "m": 4,
-        "efConstruction": 400,
-        "efSearch": 500,
-        "metric": "cosine"
-      }
-    }
-  ],
-  "profiles": [
-    {
-      "name": "vector-profile",
-      "algorithm": "vectorConfig"
-    }
-  ]
-}
+2. Keep the current vector schema exactly as follows:
 
-Make sure the embedding vector field references:
+   vectorSearch:
+     algorithms:
+       name: vectorConfig
+       kind: hnsw
+       hnswParameters:
+         m: 4
+         efConstruction: 400
+         efSearch: 500
+         metric: cosine
 
-"vectorSearchProfile": "vector-profile"
+     profiles:
+       name: vector-profile
+       algorithm: vectorConfig
 
-Do not change:
-- Azure OpenAI endpoint
-- embedding API key
-- embedding deployment
-- GPT configuration
-- SQL/database
-- authentication
-- MCP
-- RAG architecture
-- chunking
-- PDF extraction
+3. Keep the vector field configured with:
 
-Use the existing Azure AI Search API version unless the current implementation absolutely requires another version.
+   vectorSearchProfile: vector-profile
 
-After the minimal change:
-1. dotnet build
-2. dotnet test
-3. dotnet build tools/KnowledgeIngestor
-4. dotnet run --project tools\KnowledgeIngestor
+4. Do NOT revert to the old "parameters" property.
 
-Do not make speculative changes.
+5. Do NOT change:
+   - Azure OpenAI endpoint
+   - embedding deployment
+   - embedding API key
+   - Search endpoint/key
+   - SQL/database
+   - authentication
+   - MCP
+   - PDF extraction
+   - chunking
+   - RAG architecture
 
-Report the result. If another Azure AI Search schema error occurs, stop and report the exact error rather than changing unrelated code.
+6. IMPORTANT: inspect AzureAiSearchKnowledgeService.cs as well.
+   If its Search REST request uses an old Azure AI Search API version or old vector-query JSON syntax that is incompatible with 2024-07-01, update ONLY that API version/query syntax as required by the 2024-07-01 REST API.
+
+   Do not redesign the search implementation.
+
+7. Run:
+   dotnet build
+   dotnet test
+   dotnet build tools/KnowledgeIngestor
+   dotnet run --project tools\KnowledgeIngestor
+
+8. If index creation succeeds but document upload or vector querying fails, stop and report the exact error. Do not make speculative changes.
+
+The goal is:
+PDF extraction → chunking → embeddings → create vector index → upload documents/vectors.
+
+Do not modify unrelated code.
