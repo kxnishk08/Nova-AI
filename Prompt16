@@ -1,51 +1,21 @@
-RAG RETRIEVAL IS NOW VERIFIED END-TO-END.
-
-Do not modify the working RAG ingestion or retrieval implementation.
-
-Next, inspect the existing AI/conversational layer and determine the current status of:
-
-POST /api/ai/ask
-
-I need the complete end-to-end conversational flow required by the Nova Banking case study.
-
-Verify that:
-
-1. Public banking policy/FAQ questions use:
-   Azure OpenAI → RAG → Azure AI Search → grounded response.
-
-2. Authenticated customer-specific questions use:
-   authenticated server-side session → authorized banking service/MCP tool → customer-owned data → response.
-
-3. CustomerId is NEVER taken from the user's chat message as an authorization source.
-
-4. The LLM is NOT the authentication or authorization authority.
-
-5. MCP tools remain read-only.
-
-6. Retrieved RAG content cannot override security instructions.
-
-7. Responses do not expose:
-   - PINs
-   - session IDs
-   - API keys
-   - raw credentials
-   - unnecessary full account/card identifiers
-
-First inspect the existing code and report:
-- whether /api/ai/ask exists
-- its current implementation
-- whether Azure OpenAI chat generation is implemented
-- whether Semantic Kernel is implemented
-- whether RAG retrieval is connected to the final answer
-- whether MCP tools are connected to the final answer
-- what is still missing
-
-Do NOT rewrite anything yet.
-
-Run:
-dotnet build
-dotnet test
-
-Then give me a concise gap report.
-
-Do not make speculative architectural changes.
+                    ┌──────────────────┐
+                    │  POST /ai/ask    │
+                    └────────┬─────────┘
+                             │
+                     AiAssistantService
+                             │
+               ┌─────────────┴─────────────┐
+               │                           │
+        Public question              Customer question
+               │                           │
+               ▼                           ▼
+       Azure AI Search             NB_SID session
+               │                           │
+          RAG chunks                CurrentUserAccessor
+               │                           │
+               ▼                           ▼
+        Azure OpenAI              BankingService
+               │                           │
+               └─────────────┬─────────────┘
+                             ▼
+                     Grounded response
