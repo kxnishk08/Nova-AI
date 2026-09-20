@@ -1,4 +1,10 @@
-dotnet user-secrets set "AzureOpenAI:ChatDeployment" "gpt-4o" --project .\src\NovaBanking.Api
+dotnet user-secrets set "AzureAiSearch:EmbeddingDeployment" "text-embedding-3-small" --project .\src\NovaBanking.Api
+
+dotnet user-secrets set "AzureAiSearch:OpenAiEndpoint" "https://kanishksharma-7060-resource.services.ai.azure.com" --project .\src\NovaBanking.Api
+
+
+
+dotnet user-secrets set "AzureAiSearch:OpenAiApiKey" "YOUR_ACTUAL_EMBEDDING_RESOURCE_KEY" --project .\src\NovaBanking.Api
 
 dotnet run --project .\src\NovaBanking.Api
 
@@ -11,34 +17,4 @@ Invoke-RestMethod `
     -Method Post `
     -ContentType "application/json" `
     -Body $body
-
-------------------------------
-
-$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-
-$body = @{
-    customerNumber = "CUST0001"
-    pin = "1111"
-} | ConvertTo-Json
-
-Invoke-WebRequest `
-    -Uri "http://localhost:5146/api/auth/pin-login" `
-    -Method Post `
-    -ContentType "application/json" `
-    -Body $body `
-    -WebSession $session `
-    -UseBasicParsing
-
-
-$body = @{
-    message = "What is my account balance?"
-} | ConvertTo-Json
-
-Invoke-RestMethod `
-    -Uri "http://localhost:5146/api/ai/ask" `
-    -Method Post `
-    -ContentType "application/json" `
-    -Body $body `
-    -WebSession $session
-----------------------------------------
 
