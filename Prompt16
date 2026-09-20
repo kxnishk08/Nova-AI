@@ -1,50 +1,91 @@
-Now verify the RAG retrieval path end-to-end.
+We have identified the current RAG retrieval failure.
 
-Do NOT change the existing architecture or ingestion pipeline.
+Azure OpenAI query embedding succeeds.
+Azure AI Search index exists and contains 12 chunks.
+The current search request returns:
 
-We have confirmed:
-- Azure AI Search index: nova-banking-knowledge-index
-- 4 documents
-- 12 chunks uploaded
-- embeddings generated successfully
-- 26 tests passing
+HTTP 405 MethodNotAllowed
 
-I want a minimal read-only verification of the existing RAG search implementation.
+Current incorrect request:
+POST
+/indexes/nova-banking-knowledge-index/search?api-version=2024-07-01
 
-Tasks:
+Current incorrect body shape:
+{
+  "vector": {
+    "value": [...],
+    "fields": ["embedding"],
+    "k": 5,
+    "profile": "vector-profile"
+  },
+  "select": [...],
+  "query": "*"
+}
 
-1. Inspect the existing AzureAiSearchKnowledgeService implementation.
+According to the Azure AI Search REST API, the correct search operation is:
 
-2. Verify that vector search:
-   - generates an embedding for the user's question using the same text-embedding-3-small deployment
-   - queries nova-banking-knowledge-index
-   - uses the correct vector field
-   - uses the correct vectorSearchProfile
-   - returns the top relevant chunks
-   - preserves document metadata such as DocumentId, Title, Category, Version, EffectiveDate, PageNumber, SourceUrl
+POST
+/indexes/nova-banking-knowledge-index/docs/search?api-version=2024-07-01
 
-3. Run a simple test query against the existing index, for example:
+The vector query should use the vectorQueries array.
 
+Make the MINIMAL change in:
+
+src/NovaBanking.Infrastructure/Search/AzureAiSearchKnowledgeService.cs
+
+Use this request structure:
+
+{
+  "count": true,
+  "select": "documentId,title,category,version,effectiveDate,pageNumber,sourceUrl,content",
+  "top": 5,
+  "vectorQueries": [
+    {
+      "kind": "vector",
+      "vector": [ ...embedding floats... ],
+      "fields": "embedding",
+      "k": 5
+    }
+  ]
+}
+
+Important:
+- fields must be the string "embedding", not an array.
+- vector must be the embedding float array directly.
+- use vectorQueries, not vector.
+- do NOT put "profile" inside the vector query unless the 2024-07-01 API specifically requires it.
+- Do NOT use "query": "*" unless needed for hybrid search.
+- Keep the API version 2024-07-01.
+- Keep the existing Azure Search endpoint and API key configuration.
+- Keep the existing text-embedding-3-small embedding flow.
+- Keep the existing index and vectorSearchProfile configuration.
+- Do NOT recreate or redesign the index.
+- Do NOT change Azure resources.
+- Do NOT change PdfPig.
+- Do NOT change MCP/authentication/SQL.
+
+The endpoint should therefore be constructed as:
+
+_options.Endpoint
+    + "/indexes/"
+    + _options.IndexName
+    + "/docs/search?api-version=2024-07-01"
+
+After the minimal change:
+
+1. dotnet build
+2. dotnet test
+3. Run the existing retrieval verification.
+4. Use the test question:
    "What are the rules for savings account minimum balance?"
 
-4. Report:
-   - whether the query embedding succeeds
-   - whether Azure AI Search returns results
-   - number of results
-   - titles/categories of returned documents
-   - page numbers
-   - short sanitized excerpts sufficient to prove relevance
+Report:
+- whether query embedding succeeds
+- HTTP status from Azure AI Search
+- number of returned results
+- returned document titles/categories/page numbers
+- short sanitized content excerpts proving the result is relevant
 
-5. Do NOT print API keys, connection strings, customer data, session IDs, or other secrets.
+Do not print API keys, connection strings, customer data, session IDs, or secrets.
 
-6. If the current search implementation is incompatible with the 2024-07-01 Search API, make only the minimum required correction.
-
-7. Run:
-   dotnet build
-   dotnet test
-
-8. Do NOT modify authentication, MCP, SQL, banking services, ingestion, PDF extraction, or unrelated code.
-
-If retrieval succeeds, stop and report the evidence.
-
-If retrieval fails, stop at the first error and report the exact HTTP status, sanitized response body, URL/API operation, and relevant code location. Do not make speculative changes.
+If the request gets a 400 instead of 200, stop and report the exact sanitized response. Do not make further speculative changes.
