@@ -1,23 +1,4 @@
-Do not change any code.
+dotnet user-secrets set "AzureAiSearch:OpenAiEndpoint" "https://kanishksharma-7060-resource.services.ai.azure.com" --id fecc178c-bea8-4855-a006-38dcefa75107
 
-We have confirmed:
-Endpoint:
-https://kanishksharma-7060-resource.services.ai.azure.com
+dotnet user-secrets set "AzureAiSearch:OpenAiApiKey" "PASTE_THE_KEY_FROM_KANISHKSHARMA_RESOURCE_HERE" --id fecc178c-bea8-4855-a006-38dcefa75107
 
-Deployment:
-text-embedding-3-small
-
-The v1 embeddings request still returns DeploymentNotFound.
-
-I suspect AzureAiSearch:OpenAiApiKey may still be the API key belonging to the old novaai2026 resource.
-
-Inspect the current configuration loading for KnowledgeIngestor and tell me:
-1. Which UserSecretsId it uses.
-2. Whether AzureAiSearch:OpenAiApiKey is being loaded from that shared user-secrets store.
-3. Do NOT print the secret value.
-4. Do NOT modify code or configuration.
-5. Do NOT make any Azure changes.
-
-Just report the configuration source/path being used.
-
-dotnet user-secrets set "AzureAiSearch:OpenAiApiKey" "YOUR_KEY_FROM_KANISHKSHARMA_RESOURCE" --project .\src\NovaBanking.Api
