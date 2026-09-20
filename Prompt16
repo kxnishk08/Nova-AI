@@ -1,130 +1,50 @@
-The UserSecrets configuration issue is fixed.
+The Azure deployment issue is identified.
 
-KnowledgeIngestor now successfully loads the shared secrets, reaches Azure OpenAI, and receives:
+The text-embedding-3-small deployment is NOT on the novaai2026.openai.azure.com resource.
 
-HTTP 404
-{"error":{"code":"404","message":"Resource not found"}}
+The deployment details page shows:
 
-The current implementation uses the older Azure OpenAI embeddings route:
-
-/openai/deployments/{deployment}/embeddings?api-version=2023-10-01
-
-Update the embedding implementation to the current Azure OpenAI OpenAI-compatible v1 embeddings API.
-
-IMPORTANT:
-- Do not change the Azure resource.
-- Do not create another deployment.
-- Do not change the deployment name.
-- Do not change the User Secrets.
-- Do not add Azure.AI.OpenAI.
-- Do not modify MCP/authentication/database code.
-
-CURRENT AZURE CONFIGURATION
-
-Azure OpenAI resource:
-novaai2026
-
-Azure OpenAI endpoint:
-https://novaai2026.openai.azure.com/
-
-Embedding deployment:
+Deployment name:
 text-embedding-3-small
 
-The deployment is confirmed as Succeeded in Microsoft Foundry.
+Status:
+Succeeded
 
-TASK
+Endpoint:
+https://kanishksharma-7060-resource.services.ai.azure.com
 
-1. Update the REST embedding implementation in:
+Therefore update ONLY the embedding configuration so that the RAG embedding calls use:
 
-src/NovaBanking.Infrastructure/Search/AzureAiSearchKnowledgeService.cs
+AzureAiSearch:OpenAiEndpoint =
+https://kanishksharma-7060-resource.services.ai.azure.com
 
-and
+AzureAiSearch:EmbeddingDeployment =
+text-embedding-3-small
 
-tools/KnowledgeIngestor/Program.cs
+Do NOT change the GPT-4o configuration, Azure OpenAI configuration, Azure AI Search configuration, database configuration, or code architecture.
 
-to use:
+The embedding implementation should continue using:
 
 POST {endpoint}/openai/v1/embeddings
 
-2. Use the OpenAI-compatible request format:
+with:
 
 {
-  "input": ["text 1", "text 2"]
+  "input": [...],
   "model": "text-embedding-3-small"
 }
 
-Use the configured deployment name for the model value. Do not hardcode it.
+using the api-key header.
 
-3. Authenticate using:
+Do not expose or print any secrets.
 
-api-key: <configured Azure OpenAI API key>
+After updating the configuration:
+1. Build the solution.
+2. Run all tests.
+3. Build KnowledgeIngestor.
+4. Run:
+   dotnet run --project tools\KnowledgeIngestor
 
-4. Parse:
+Report the exact result, especially whether index creation and PDF ingestion now proceed past embedding generation.
 
-data[].embedding
-
-into the existing float[] representation.
-
-5. Do not use:
-
-/openai/deployments/{deployment}/embeddings?api-version=2023-10-01
-
-anymore.
-
-6. Keep the existing configuration keys:
-
-AzureAiSearch:OpenAiEndpoint
-AzureAiSearch:OpenAiApiKey
-AzureAiSearch:EmbeddingDeployment
-
-7. Make sure endpoint normalization doesn't produce a malformed URL if the configured endpoint ends with '/'.
-
-8. Use the same embedding implementation for:
-   - index dimension detection
-   - document/chunk embeddings during ingestion
-   - runtime query embeddings
-
-Avoid having three different embedding implementations.
-
-9. Do not change Azure AI Search code yet.
-
-10. Run:
-
-dotnet restore
-dotnet build
-dotnet test
-dotnet build tools/KnowledgeIngestor
-
-11. Then run:
-
-dotnet run --project tools/KnowledgeIngestor
-
-EXPECTED RESULT
-
-The program should get past:
-
-"Unable to obtain embedding dimension"
-
-and proceed to:
-- index initialization
-- PDF extraction
-- chunking
-- embedding generation
-- Azure AI Search upsert
-
-If the new v1 embeddings request still returns 404, STOP.
-
-Do not make additional speculative code changes.
-
-Instead report:
-- exact HTTP URL used, WITHOUT the API key
-- deployment/model name used
-- HTTP status
-- response body
-- whether the request reached novaai2026
-
-Do not print any API keys or secret values.
-
-Also report whether the Azure OpenAI v1 endpoint is supported by the resource.
-
-The goal is to determine whether the problem is the old API route or whether the deployment is associated with a different Foundry/Azure resource.
+Do not make speculative code changes if another error occurs. Stop and report the exact error.
