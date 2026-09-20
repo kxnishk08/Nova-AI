@@ -1,75 +1,83 @@
-We have a runtime configuration bug in the AI/RAG flow. Do NOT redesign the architecture or change Azure resources.
+We have fixed the embedding configuration. The public /api/ai/ask request now successfully passes through RAG and reaches OpenAiRestChat, but chat completion returns:
 
-Current `dotnet user-secrets list --project .\src\NovaBanking.Api` confirms these values exist:
+System.Net.Http.HttpRequestException:
+Response status code does not indicate success: 404 (Resource Not Found).
 
-AzureOpenAI:ChatDeployment = gpt-4o
+Stack:
+NovaBanking.Infrastructure.Search.OpenAiRestChat.CreateChatCompletionAsync(...)
+NovaBanking.Infrastructure.Services.AiAssistantService.AskAsync(...)
 
-AzureAiSearch:OpenAiEndpoint = https://kanishksharma-7060-resource.services.ai.azure.com
-AzureAiSearch:OpenAiApiKey = [configured secret]
-AzureAiSearch:EmbeddingDeployment = text-embedding-3-small
-AzureAiSearch:Endpoint = https://novasearch28.search.windows.net
-AzureAiSearch:IndexName = nova-banking-knowledge-index
-AzureAiSearch:ApiKey = [configured secret]
+Important current configuration:
 
-But POST /api/ai/ask fails with:
+AzureAiSearch:OpenAiEndpoint =
+https://kanishksharma-7060-resource.services.ai.azure.com
 
-System.InvalidOperationException:
-OpenAI endpoint and API key must be configured in AzureAiSearchOptions.OpenAiEndpoint/OpenAiApiKey
+AzureAiSearch:EmbeddingDeployment =
+text-embedding-3-small
 
-at:
-NovaBanking.Infrastructure.Search.AzureAiSearchKnowledgeService.CreateEmbeddingAsync(...)
-line 123
+AzureOpenAI:ChatDeployment =
+gpt-4o
 
-The important fact is that the User Secrets contain the values, but AzureAiSearchKnowledgeService sees OpenAiEndpoint/OpenAiApiKey as null or empty.
+The embedding endpoint above is known to work for text-embedding-3-small.
 
-Please inspect the actual code and diagnose the configuration binding path.
+Do NOT assume that the GPT-4o deployment is hosted on the same resource as the embedding deployment.
 
-Specifically inspect:
+Please inspect the current code, especially:
 
-1. AzureAiSearchOptions.cs
-2. ServiceCollectionExtensions.cs
-3. Program.cs
-4. AzureAiSearchKnowledgeService constructor and CreateEmbeddingAsync()
-5. Any registration of AzureAiSearchOptions, IOptions<AzureAiSearchOptions>, or AzureAiSearchKnowledgeService
-6. Configuration provider ordering, especially AddUserSecrets
-7. Whether Infrastructure is receiving the same IConfiguration instance from the API
-8. Whether AzureAiSearchOptions is manually constructed anywhere instead of being bound from IConfiguration
-9. Whether property names exactly match:
-   OpenAiEndpoint
-   OpenAiApiKey
-   EmbeddingDeployment
-   Endpoint
-   ApiKey
-   IndexName
-10. Whether the service is accidentally binding from a different section such as AzureOpenAI instead of AzureAiSearch.
+1. OpenAiRestChat.cs
+2. AiAssistantService.cs
+3. AzureAiSearchOptions.cs
+4. ServiceCollectionExtensions.cs
+5. Program.cs
+6. appsettings.json / appsettings.Development.json
 
-Do NOT print or log the actual API key or SQL password.
+Determine exactly which endpoint and API key OpenAiRestChat currently receives.
 
-Add a temporary safe diagnostic if necessary that reports only whether each configuration value is null/empty and the non-secret endpoint/deployment names. Do not expose secret values.
+Then determine the intended configuration architecture:
 
-The expected binding is conceptually:
+- AzureAiSearch:OpenAiEndpoint/OpenAiApiKey should remain the credentials for the embedding resource.
+- GPT-4o chat should have its OWN endpoint and API key configuration if it is deployed on a different Azure OpenAI/Foundry resource.
 
-configuration section:
-"AzureAiSearch"
+Do not reuse the embedding endpoint for chat unless the GPT-4o deployment is actually hosted there.
 
-to:
+Implement the smallest clean fix:
 
-AzureAiSearchOptions
+Add separate chat configuration properties, for example:
 
-with:
+AzureOpenAI:Endpoint
+AzureOpenAI:ApiKey
+AzureOpenAI:ChatDeployment
 
-OpenAiEndpoint <- AzureAiSearch:OpenAiEndpoint
-OpenAiApiKey <- AzureAiSearch:OpenAiApiKey
-EmbeddingDeployment <- AzureAiSearch:EmbeddingDeployment
-Endpoint <- AzureAiSearch:Endpoint
-ApiKey <- AzureAiSearch:ApiKey
-IndexName <- AzureAiSearch:IndexName
+Then make OpenAiRestChat use:
 
-Fix the root cause rather than hardcoding any values.
+AzureOpenAI:Endpoint
+AzureOpenAI:ApiKey
+AzureOpenAI:ChatDeployment
 
-Then:
-- build the solution
-- run the existing tests
-- report exactly what caused the values to be empty
-- report the files changed
-- do not modify authentication, MCP, RAG search logic, database, or Azure resources.
+while AzureAiSearchKnowledgeService continues using:
+
+AzureAiSearch:OpenAiEndpoint
+AzureAiSearch:OpenAiApiKey
+AzureAiSearch:EmbeddingDeployment
+
+Do NOT hardcode endpoints, deployment names, or keys.
+
+Also inspect the exact REST route currently constructed by OpenAiRestChat. Do not blindly change the API version. First verify that the endpoint/deployment combination is correct.
+
+Add safe diagnostics if needed, showing only:
+
+- Chat endpoint hostname
+- Chat deployment name
+- whether chat API key is configured
+
+Never print the API key.
+
+After making the change:
+
+1. Build the solution.
+2. Run all tests.
+3. Confirm existing 26 tests still pass.
+4. Report the exact reason for the 404.
+5. Report the exact configuration keys OpenAiRestChat now uses.
+
+Do not modify authentication, MCP, database, RAG retrieval, PDF ingestion, or Azure resources.
