@@ -1,65 +1,96 @@
-Proceed with Option A: align the UglyToad.PdfPig dependencies.
+Proceed with diagnosing and fixing the current KnowledgeIngestor embedding failure.
 
 Current status:
-- Azure OpenAI embeddings: WORKING
-- Azure AI Search index creation: WORKING
-- Azure AI Search API version 2024-07-01: WORKING
-- Vector schema/vectorSearchProfile: WORKING
+- PdfPig dependency mismatch: FIXED
+- PDF extraction: WORKING
+- Chunking: WORKING
+- Azure OpenAI embedding configuration was previously fixed
+- Azure AI Search index API version: 2024-07-01
+- Azure AI Search vector schema: WORKING
 - Solution build: PASSED
 - Tests: 26 PASSED
-- KnowledgeIngestor build: PASSED
-- Current blocker is ONLY the PdfPig runtime dependency mismatch.
 
-Runtime exception:
+KnowledgeIngestor now reports:
 
-System.MissingMethodException:
-Method not found:
-'Void UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner..ctor(...)'
+Pages extracted: 3
+Chunks generated: 3
 
-The restore warnings show:
-- UglyToad.PdfPig 0.1.9-alpha001-patch1 requested
-- UglyToad.PdfPig.Core resolved to 1.7.0-custom-5
-- UglyToad.PdfPig.Tokenization resolved to 1.7.0-custom-5
-- UglyToad.PdfPig.Tokens resolved to 1.7.0-custom-5
-- UglyToad.PdfPig.Fonts resolved to 1.7.0-custom-5
+Then:
 
-This strongly indicates an inconsistent PdfPig dependency graph.
+System.InvalidOperationException:
+Embedding request failed: NotFound
+
+at tools/KnowledgeIngestor/Program.cs line 70
+
+Important context:
+There is already a shared implementation:
+
+src/NovaBanking.Infrastructure/Search/OpenAiRestEmbeddings.cs
+
+It uses the Azure OpenAI-compatible v1 embeddings endpoint:
+
+POST {endpoint}/openai/v1/embeddings
+
+with:
+
+{
+  "input": [...],
+  "model": "text-embedding-3-small"
+}
+
+The KnowledgeIngestor previously had a separate local embedding implementation.
 
 Tasks:
 
-1. Inspect all .csproj files for UglyToad.PdfPig package references.
-2. Run/inspect:
-   dotnet list package --include-transitive
-   for KnowledgeIngestor and any project that references PdfPig.
-3. Determine the compatible PdfPig package family actually available from the configured NuGet sources.
-4. Align PdfPig and all of its related packages to ONE mutually compatible version family.
-5. Do not manually mix versions of:
-   UglyToad.PdfPig
-   UglyToad.PdfPig.Core
-   UglyToad.PdfPig.Tokenization
-   UglyToad.PdfPig.Tokens
-   UglyToad.PdfPig.Fonts
-6. Prefer a stable, mutually compatible package set available from the configured package sources.
-7. Remove stale/incompatible explicit package references if necessary rather than forcing mismatched transitive versions.
+1. Inspect the CURRENT tools/KnowledgeIngestor/Program.cs embedding implementation.
+2. Determine the exact URL it is calling, without printing API keys/secrets.
+3. Determine the effective OpenAiEndpoint and EmbeddingDeployment configuration source/value (endpoint and deployment only; never print the key).
+4. Compare its implementation with:
+   src/NovaBanking.Infrastructure/Search/OpenAiRestEmbeddings.cs
+
+5. If KnowledgeIngestor is still using its own outdated embedding implementation, replace that local implementation with the existing shared OpenAiRestEmbeddings.GetEmbeddingsAsync helper.
+
+6. The KnowledgeIngestor should use:
+   endpoint:
+   https://kanishksharma-7060-resource.services.ai.azure.com
+
+   deployment/model:
+   text-embedding-3-small
+
+   endpoint:
+   {endpoint}/openai/v1/embeddings
+
+7. Preserve the existing shared UserSecrets configuration. Do not hardcode secrets.
+
 8. Do NOT change:
-   - Azure OpenAI configuration
-   - embedding implementation
-   - Azure AI Search API version
+   - Azure resources
+   - deployment
+   - API keys
+   - Azure AI Search
    - vector schema
-   - RAG architecture
-   - chunking logic
+   - PdfPig dependencies
+   - PDF extraction/chunking
    - MCP
    - authentication
-   - SQL/database
-9. After making the minimal dependency changes:
-   dotnet restore
+   - database
+   - unrelated code
+
+9. After the minimal fix run:
    dotnet build
    dotnet test
    dotnet build tools/KnowledgeIngestor
    dotnet run --project tools\KnowledgeIngestor
 
-IMPORTANT:
-Do not guess a PdfPig version.
-Do not downgrade Azure AI Search.
-Do not rewrite the PDF extraction code unless the aligned package version actually requires a small API adjustment.
-If package resolution still produces mixed PdfPig versions or the runtime throws another PdfPig exception, stop and report the exact dependency tree/error.
+10. If the embedding request still returns NotFound:
+   STOP.
+   Report:
+   - exact URL
+   - deployment/model name
+   - HTTP status
+   - sanitized response body
+   - effective endpoint source
+   - effective deployment source
+
+   Do not make another speculative Azure/code change.
+
+Do not print or expose any API key.
