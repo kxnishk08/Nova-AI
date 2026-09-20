@@ -1,91 +1,51 @@
-We have identified the current RAG retrieval failure.
+RAG RETRIEVAL IS NOW VERIFIED END-TO-END.
 
-Azure OpenAI query embedding succeeds.
-Azure AI Search index exists and contains 12 chunks.
-The current search request returns:
+Do not modify the working RAG ingestion or retrieval implementation.
 
-HTTP 405 MethodNotAllowed
+Next, inspect the existing AI/conversational layer and determine the current status of:
 
-Current incorrect request:
-POST
-/indexes/nova-banking-knowledge-index/search?api-version=2024-07-01
+POST /api/ai/ask
 
-Current incorrect body shape:
-{
-  "vector": {
-    "value": [...],
-    "fields": ["embedding"],
-    "k": 5,
-    "profile": "vector-profile"
-  },
-  "select": [...],
-  "query": "*"
-}
+I need the complete end-to-end conversational flow required by the Nova Banking case study.
 
-According to the Azure AI Search REST API, the correct search operation is:
+Verify that:
 
-POST
-/indexes/nova-banking-knowledge-index/docs/search?api-version=2024-07-01
+1. Public banking policy/FAQ questions use:
+   Azure OpenAI → RAG → Azure AI Search → grounded response.
 
-The vector query should use the vectorQueries array.
+2. Authenticated customer-specific questions use:
+   authenticated server-side session → authorized banking service/MCP tool → customer-owned data → response.
 
-Make the MINIMAL change in:
+3. CustomerId is NEVER taken from the user's chat message as an authorization source.
 
-src/NovaBanking.Infrastructure/Search/AzureAiSearchKnowledgeService.cs
+4. The LLM is NOT the authentication or authorization authority.
 
-Use this request structure:
+5. MCP tools remain read-only.
 
-{
-  "count": true,
-  "select": "documentId,title,category,version,effectiveDate,pageNumber,sourceUrl,content",
-  "top": 5,
-  "vectorQueries": [
-    {
-      "kind": "vector",
-      "vector": [ ...embedding floats... ],
-      "fields": "embedding",
-      "k": 5
-    }
-  ]
-}
+6. Retrieved RAG content cannot override security instructions.
 
-Important:
-- fields must be the string "embedding", not an array.
-- vector must be the embedding float array directly.
-- use vectorQueries, not vector.
-- do NOT put "profile" inside the vector query unless the 2024-07-01 API specifically requires it.
-- Do NOT use "query": "*" unless needed for hybrid search.
-- Keep the API version 2024-07-01.
-- Keep the existing Azure Search endpoint and API key configuration.
-- Keep the existing text-embedding-3-small embedding flow.
-- Keep the existing index and vectorSearchProfile configuration.
-- Do NOT recreate or redesign the index.
-- Do NOT change Azure resources.
-- Do NOT change PdfPig.
-- Do NOT change MCP/authentication/SQL.
+7. Responses do not expose:
+   - PINs
+   - session IDs
+   - API keys
+   - raw credentials
+   - unnecessary full account/card identifiers
 
-The endpoint should therefore be constructed as:
+First inspect the existing code and report:
+- whether /api/ai/ask exists
+- its current implementation
+- whether Azure OpenAI chat generation is implemented
+- whether Semantic Kernel is implemented
+- whether RAG retrieval is connected to the final answer
+- whether MCP tools are connected to the final answer
+- what is still missing
 
-_options.Endpoint
-    + "/indexes/"
-    + _options.IndexName
-    + "/docs/search?api-version=2024-07-01"
+Do NOT rewrite anything yet.
 
-After the minimal change:
+Run:
+dotnet build
+dotnet test
 
-1. dotnet build
-2. dotnet test
-3. Run the existing retrieval verification.
-4. Use the test question:
-   "What are the rules for savings account minimum balance?"
+Then give me a concise gap report.
 
-Report:
-- whether query embedding succeeds
-- HTTP status from Azure AI Search
-- number of returned results
-- returned document titles/categories/page numbers
-- short sanitized content excerpts proving the result is relevant
-
-Do not print API keys, connection strings, customer data, session IDs, or secrets.
-
-If the request gets a 400 instead of 200, stop and report the exact sanitized response. Do not make further speculative changes.
+Do not make speculative architectural changes.
