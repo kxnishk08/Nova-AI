@@ -1,74 +1,65 @@
-The current failure is confirmed as an Azure AI Search API-version mismatch.
+Proceed with Option A: align the UglyToad.PdfPig dependencies.
 
-Current error:
+Current status:
+- Azure OpenAI embeddings: WORKING
+- Azure AI Search index creation: WORKING
+- Azure AI Search API version 2024-07-01: WORKING
+- Vector schema/vectorSearchProfile: WORKING
+- Solution build: PASSED
+- Tests: 26 PASSED
+- KnowledgeIngestor build: PASSED
+- Current blocker is ONLY the PdfPig runtime dependency mismatch.
 
-The property 'vectorSearchProfile' does not exist on type
-Microsoft.Azure.Search.V2023_07_01_Preview.SchemaField
-or is not present in API version '2023-07-01-Preview'.
+Runtime exception:
 
-We should NOT remove vectorSearchProfile. The modern vector index schema requires it.
+System.MissingMethodException:
+Method not found:
+'Void UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner..ctor(...)'
 
-Microsoft's current Azure AI Search REST API supports vector profiles and vectorSearchProfile in newer stable API versions such as 2024-07-01.
+The restore warnings show:
+- UglyToad.PdfPig 0.1.9-alpha001-patch1 requested
+- UglyToad.PdfPig.Core resolved to 1.7.0-custom-5
+- UglyToad.PdfPig.Tokenization resolved to 1.7.0-custom-5
+- UglyToad.PdfPig.Tokens resolved to 1.7.0-custom-5
+- UglyToad.PdfPig.Fonts resolved to 1.7.0-custom-5
 
-Make the MINIMAL change needed:
+This strongly indicates an inconsistent PdfPig dependency graph.
 
-1. In:
-   src/NovaBanking.Infrastructure/Search/AzureAiSearchIndexInitializer.cs
+Tasks:
 
-   Find the Azure AI Search index REST API URL currently using:
-   api-version=2023-07-01-Preview
-
-   Change ONLY the index-management API version to:
-   api-version=2024-07-01
-
-2. Keep the current vector schema exactly as follows:
-
-   vectorSearch:
-     algorithms:
-       name: vectorConfig
-       kind: hnsw
-       hnswParameters:
-         m: 4
-         efConstruction: 400
-         efSearch: 500
-         metric: cosine
-
-     profiles:
-       name: vector-profile
-       algorithm: vectorConfig
-
-3. Keep the vector field configured with:
-
-   vectorSearchProfile: vector-profile
-
-4. Do NOT revert to the old "parameters" property.
-
-5. Do NOT change:
-   - Azure OpenAI endpoint
-   - embedding deployment
-   - embedding API key
-   - Search endpoint/key
-   - SQL/database
-   - authentication
-   - MCP
-   - PDF extraction
-   - chunking
+1. Inspect all .csproj files for UglyToad.PdfPig package references.
+2. Run/inspect:
+   dotnet list package --include-transitive
+   for KnowledgeIngestor and any project that references PdfPig.
+3. Determine the compatible PdfPig package family actually available from the configured NuGet sources.
+4. Align PdfPig and all of its related packages to ONE mutually compatible version family.
+5. Do not manually mix versions of:
+   UglyToad.PdfPig
+   UglyToad.PdfPig.Core
+   UglyToad.PdfPig.Tokenization
+   UglyToad.PdfPig.Tokens
+   UglyToad.PdfPig.Fonts
+6. Prefer a stable, mutually compatible package set available from the configured package sources.
+7. Remove stale/incompatible explicit package references if necessary rather than forcing mismatched transitive versions.
+8. Do NOT change:
+   - Azure OpenAI configuration
+   - embedding implementation
+   - Azure AI Search API version
+   - vector schema
    - RAG architecture
-
-6. IMPORTANT: inspect AzureAiSearchKnowledgeService.cs as well.
-   If its Search REST request uses an old Azure AI Search API version or old vector-query JSON syntax that is incompatible with 2024-07-01, update ONLY that API version/query syntax as required by the 2024-07-01 REST API.
-
-   Do not redesign the search implementation.
-
-7. Run:
+   - chunking logic
+   - MCP
+   - authentication
+   - SQL/database
+9. After making the minimal dependency changes:
+   dotnet restore
    dotnet build
    dotnet test
    dotnet build tools/KnowledgeIngestor
    dotnet run --project tools\KnowledgeIngestor
 
-8. If index creation succeeds but document upload or vector querying fails, stop and report the exact error. Do not make speculative changes.
-
-The goal is:
-PDF extraction → chunking → embeddings → create vector index → upload documents/vectors.
-
-Do not modify unrelated code.
+IMPORTANT:
+Do not guess a PdfPig version.
+Do not downgrade Azure AI Search.
+Do not rewrite the PDF extraction code unless the aligned package version actually requires a small API adjustment.
+If package resolution still produces mixed PdfPig versions or the runtime throws another PdfPig exception, stop and report the exact dependency tree/error.
