@@ -1,72 +1,72 @@
-Implement OPTION 2.
+The KnowledgeIngestor builds successfully now, but when I run:
 
-Fix the KnowledgeIngestor build by removing all remaining Azure.AI.OpenAI SDK usage and using the same Azure OpenAI REST embedding approach already used by AzureAiSearchKnowledgeService.
+dotnet run --project tools\KnowledgeIngestor
 
-Requirements:
+it reports:
 
-1. Inspect tools/KnowledgeIngestor/Program.cs.
+"AzureAiSearch and AzureOpenAI configuration missing."
 
-2. Remove:
-   - using Azure.AI.OpenAI;
-   - OpenAIClient
-   - EmbeddingsOptions
-   - any other Azure.AI.OpenAI types/usages
+The reason is that I configured the Azure secrets using User Secrets for NovaBanking.Api, but KnowledgeIngestor is a separate project and its ConfigurationBuilder currently isn't loading that same User Secrets store.
 
-3. Do NOT add Azure.AI.OpenAI back to the project.
+Fix this properly.
 
-4. Implement embedding generation using HttpClient against the configured Azure OpenAI embeddings REST endpoint.
+REQUIREMENTS:
 
-Use the existing configuration:
-   - AzureAiSearch:OpenAiEndpoint
-   - AzureAiSearch:OpenAiApiKey
-   - AzureAiSearch:EmbeddingDeployment
+1. Inspect:
+   src/NovaBanking.Api/NovaBanking.Api.csproj
+   tools/KnowledgeIngestor/KnowledgeIngestor.csproj
+   tools/KnowledgeIngestor/Program.cs
 
-The request should target the configured Azure OpenAI resource and embedding deployment using the correct Azure OpenAI REST API format for the API version supported by the existing implementation.
+2. Find the existing UserSecretsId used by NovaBanking.Api.
 
-5. Reuse existing REST embedding logic from:
-   src/NovaBanking.Infrastructure/Search/AzureAiSearchKnowledgeService.cs
+3. Configure KnowledgeIngestor to use the SAME UserSecretsId so it can access the exact same local User Secrets store.
 
-Do not create a second incompatible implementation if the existing implementation can be extracted/reused cleanly.
+Do not create a second copy of the secrets.
 
-6. The ingestion flow must remain:
+4. Add the necessary Microsoft.Extensions.Configuration.UserSecrets package to KnowledgeIngestor if required.
 
-PDF
-→ PdfPig page extraction
-→ KnowledgeIngestionService chunking
-→ Azure OpenAI REST embeddings
-→ Azure AI Search REST upsert
+5. Update KnowledgeIngestor's ConfigurationBuilder so it loads:
+   - appsettings.json
+   - environment variables
+   - the existing shared User Secrets store
 
-7. Do NOT replace Azure AI Search with local search.
+The configuration hierarchy must continue supporting:
 
-8. Do NOT change the existing MCP implementation.
+AzureAiSearch:Endpoint
+AzureAiSearch:ApiKey
+AzureAiSearch:IndexName
+AzureAiSearch:EmbeddingDeployment
+AzureAiSearch:OpenAiEndpoint
+AzureAiSearch:OpenAiApiKey
 
-9. Do NOT change authentication, BankingService, or customer authorization.
+6. Do NOT print any secret values to the console.
 
-10. Do NOT modify Azure configuration values.
+7. Do NOT change the Azure endpoints, deployment name, index name, or existing secrets.
 
-11. Remove unused imports and dead code resulting from the SDK removal.
+8. Do NOT add Azure.AI.OpenAI.
 
-12. Run:
+9. Do NOT modify the RAG architecture or MCP implementation.
+
+10. Run:
 
 dotnet restore
-dotnet build
-dotnet test
 dotnet build tools/KnowledgeIngestor
+dotnet test
 
-13. The final result must have:
-   - zero build errors
-   - KnowledgeIngestor successfully compiling
-   - existing tests still passing
+11. Then run:
 
-The NU1603 warnings about Azure.Search.Documents 12.0.0 and PdfPig may remain for now. Do not spend time fixing those warnings unless they cause an actual build/runtime failure.
+dotnet run --project tools/KnowledgeIngestor
 
-IMPORTANT:
-Do not add Azure.AI.OpenAI back just to make the compiler happy. The intended implementation is REST-based embeddings, consistent with AzureAiSearchKnowledgeService.
+If configuration is now loaded, it should proceed to the PDF/Azure ingestion stage.
+
+Do NOT ask me to paste the Azure keys into source code or appsettings.json.
 
 Report:
-- exact changes made
-- whether Azure.AI.OpenAI is completely absent from KnowledgeIngestor
+- UserSecretsId used by the API
+- how KnowledgeIngestor now loads the shared secrets
+- package added, if any
 - build result
 - test result
-- KnowledgeIngestor build result
-- any remaining warnings/errors
+- result of running KnowledgeIngestor
+
+Do not expose any secret values in the report.
